@@ -17,7 +17,7 @@ from senseis.configuration import is_candle_exchange_name, get_exchange_pids
 
 def setup_logging(args):
   logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
+  logger.setLevel(logging.INFO)
   fhandler = logging.FileHandler(args.logfile, mode='w')
   formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-5s %(message)s', datefmt='%H:%M:%s')
   fhandler.setFormatter(formatter)
@@ -106,7 +106,7 @@ async def candle_extraction_producer_consumer(pids, periodicity, exchange_name):
     for pid in pids:
       producers.append(asyncio.create_task(candle_extraction(pid, periodicity, session, que)))
     consumers = [asyncio.create_task(candle_consumer(pids, exchange_name, periodicity, que))]
-    await asyncio.gather(*producers)
+    await asyncio.gather(*producers, return_exceptions=True)
     await que.join()
     for c in consumers:
       c.cancel()

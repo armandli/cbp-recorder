@@ -108,7 +108,7 @@ async def book_extraction_producer_consumer(pids, level, period, exchange_name):
     for pid in pids:
       producers.append(asyncio.create_task(book_extraction(pid, level, period, session, que)))
     consumers = [asyncio.create_task(book_consumer(pids, exchange_name, que))]
-    await asyncio.gather(*producers)
+    await asyncio.gather(*producers, return_exceptions=True)
     await que.join()
     for c in consumers:
       c.cancel()

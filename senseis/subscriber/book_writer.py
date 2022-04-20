@@ -19,7 +19,7 @@ from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_
 
 def setup_logging(args):
   logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
+  logger.setLevel(logging.INFO)
   fhandler = logging.FileHandler(args.logfile, mode='w')
   formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-5s %(message)s', datefmt='%H:%M:%s')
   fhandler.setFormatter(formatter)
@@ -31,49 +31,10 @@ def setup_logging(args):
 
 def build_parser():
   parser = argparse.ArgumentParser(description='')
-  parser.add_argument('--period', type=int, help='output period, in minutes', default=3600)
+  parser.add_argument('--period', type=int, help='output period, in minutes', default=1440)
   parser.add_argument('--exchange', type=str, help='queue exchange name', required=True)
   parser.add_argument('--logfile', type=str, help='logfile path', required=True)
   return parser
-
-#async def write_book_to_s3(s3bucket, s3outdir, periodicity, data, exchange_name, msg: aio_pika.IncomingMessage):
-#  async with msg.process():
-#    dat = json.loads(msg.body)
-#    dat_period = get_period(int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp()), periodicity)
-#    if data:
-#      data_period = get_period(int(datetime.strptime(data[0][STIME_COLNAME], DATETIME_FORMAT).timestamp()), periodicity)
-#    else:
-#      data_period = dat_period
-#    if data_period == dat_period:
-#      data.append(dat)
-#      return
-#    start_epoch = data_period * periodicity
-#    end_epoch = (data_period + 1) * periodicity
-#    filename = s3outdir + '/' + exchange_name + '_' + str(start_epoch) + '_' + str(end_epoch) + '.parquet'
-#    logging.info("Write s3://{}/{}".format(s3bucket, filename))
-#    df = data_to_df(data, exchange_name)
-#    logging.info("Dataframe size {}".format(len(df)))
-#    parquet_buffer = BytesIO()
-#    df.to_parquet(parquet_buffer, index=False)
-#    session = abcsession.get_session()
-#    async with session.create_client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET) as client:
-#      resp = await client.put_object(Bucket=s3bucket, Key=filename, Body=parquet_buffer.getvalue())
-#      logging.info(resp)
-#    data.clear()
-#    data.append(dat)
-#
-#async def consume_book(exchange_name, s3bucket, s3outdir, periodicity):
-#  data = []
-#  book_handler = partial(write_book_to_s3, s3bucket, s3outdir, periodicity, data, exchange_name)
-#  connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
-#  async with connection:
-#    channel = await connection.channel()
-#    await channel.set_qos(prefetch_count=1)
-#    exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
-#    queue = await channel.declare_queue('', auto_delete=True)
-#    await queue.bind(exchange=exchange)
-#    await queue.consume(book_handler)
-#    await asyncio.Future()
 
 def data_to_df(data, exchange_name):
   pids = get_exchange_pids(exchange_name)
@@ -148,7 +109,7 @@ async def consume_book(exchange_name, s3bucket, s3outdir, periodicity):
   que = asyncio.Queue()
   subscriber = asyncio.create_task(book_subscriber(exchange_name, que))
   writer = asyncio.create_task(book_writer(exchange_name, s3bucket, s3outdir, periodicity, que))
-  await asyncio.gather(subscriber)
+  await asyncio.gather(subscriber, return_exceptions=True)
   await que.join()
   writer.cancel()
 
