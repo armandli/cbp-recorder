@@ -27,7 +27,7 @@ setup(
         'book_writer = senseis.subscriber.book_writer:main',
         'candle_writer = senseis.subscriber.candle_writer:main',
         'printer = senseis.subscriber.printer:main',
-        'candle_backfiller = session.backfiller.candle_backfiller:main',
+        'candle_backfiller = senseis.backfiller.candle_backfiller:main',
     ]
   },
   scripts=[]

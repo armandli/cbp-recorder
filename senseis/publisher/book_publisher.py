@@ -18,7 +18,7 @@ from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_
 
 def setup_logging(args):
   logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
+  logger.setLevel(logging.INFO)
   fhandler = logging.FileHandler(args.logfile, mode='w')
   formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-5s %(message)s', datefmt='%H:%M:%s')
   fhandler.setFormatter(formatter)
@@ -44,6 +44,8 @@ def build_parser():
 async def book_extraction(pid, level, period, session, que):
   # synchronize at the start of next minute
   utc = pytz.timezone("UTC")
+  url = 'https://api.exchange.coinbase.com/products/{}/book?level={}'.format(pid, level)
+  header = {"Accept": "application/json"}
   t = datetime.now(utc)
   nxt_min = t + timedelta(seconds=60)
   nxt_min = nxt_min - timedelta(seconds=nxt_min.second, microseconds=nxt_min.microsecond)
@@ -51,8 +53,6 @@ async def book_extraction(pid, level, period, session, que):
   await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
   logging.info("Starting {}".format(pid))
   while True:
-    url = 'https://api.exchange.coinbase.com/products/{}/book?level={}'.format(pid, level)
-    header = {"Accept": "application/json"}
     time_record = datetime.now(utc)
     periodic_time = time_record - timedelta(microseconds=time_record.microsecond)
     while True:

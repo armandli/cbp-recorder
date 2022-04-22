@@ -50,6 +50,7 @@ def data_to_df(data, exchange_name):
       asks = np.array(pid_data['asks'], dtype=np.float32).flatten()
       d[pid + ':' + 'bids'].append(bids)
       d[pid + ':' + 'asks'].append(asks)
+      d[pid + ':' + 'sequence'].append(int(pid_data['sequence']))
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)
