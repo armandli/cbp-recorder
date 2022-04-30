@@ -3,18 +3,17 @@ import logging
 import json
 from datetime import datetime
 import pandas as pd
-import numpy as np
 import asyncio
 
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
-from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
+from senseis.configuration import is_stat_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
 
 def data_to_df(data, exchange_name):
   pids = get_exchange_pids(exchange_name)
-  columns = [pid + ':' + ty for pid in pids for ty in ['bids', 'asks', 'sequence']]
+  columns = [pid + ':' + ty for pid in pids for ty in ['open','last','high','low','volume','volume_30day']]
   columns.append(STIME_COLNAME)
   columns.append(RTIME_COLNAME)
   data.sort(key=lambda x: datetime.strptime(x[STIME_COLNAME], DATETIME_FORMAT))
@@ -22,11 +21,12 @@ def data_to_df(data, exchange_name):
   for row in data:
     for pid in pids:
       pid_data = json.loads(row[pid])
-      bids = np.array(pid_data['bids'], dtype=np.float32).flatten()
-      asks = np.array(pid_data['asks'], dtype=np.float32).flatten()
-      d[pid + ':' + 'bids'].append(bids)
-      d[pid + ':' + 'asks'].append(asks)
-      d[pid + ':' + 'sequence'].append(int(pid_data['sequence']))
+      d[pid + ':' + 'open'].append(float(pid_data['open']))
+      d[pid + ':' + 'last'].append(float(pid_data['last']))
+      d[pid + ':' + 'high'].append(float(pid_data['high']))
+      d[pid + ':' + 'low'].append(float(pid_data['low']))
+      d[pid + ':' + 'volume'].append(float(pid_data['volume']))
+      d[pid + ':' + 'volume_30day'].append(float(pid_data['volume_30day']))
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)
@@ -36,7 +36,7 @@ def main():
   parser = build_subscriber_parser()
   args = parser.parse_args()
   setup_logging(args)
-  if not is_book_exchange_name(args.exchange):
+  if not is_stat_exchange_name(args.exchange):
     logging.error("Invalid exchange name. exit.")
     return
   s3bucket = get_s3_bucket(args.exchange)

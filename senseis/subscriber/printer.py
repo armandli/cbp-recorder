@@ -4,18 +4,7 @@ import asyncio
 import aio_pika
 
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD, is_valid_exchange_name
-
-def setup_logging(args):
-  logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
-  fhandler = logging.FileHandler(args.logfile, mode='w')
-  formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-5s %(message)s', datefmt='%H:%M:%s')
-  fhandler.setFormatter(formatter)
-  logger.addHandler(fhandler)
-  chandler = logging.StreamHandler()
-  chandler.setLevel(logging.INFO)
-  chandler.setFormatter(formatter)
-  logger.addHandler(chandler)
+from senseis.utility import setup_logging
 
 def build_parser():
   parser = argparse.ArgumentParser(description='')

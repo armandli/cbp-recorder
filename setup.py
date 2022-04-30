@@ -23,11 +23,13 @@ setup(
   entry_points={
     'console_scripts':[
         'book_publisher = senseis.publisher.book_publisher:main',
-        'candle_publisher = senseis.publisher.candle_publisher:main',
         'book_writer = senseis.subscriber.book_writer:main',
-        'candle_writer = senseis.subscriber.candle_writer:main',
-        'printer = senseis.subscriber.printer:main',
+        'ticker_publisher = senseis.publisher.ticker_publisher:main',
+        'ticker_writer = senseis.subscriber.ticker_writer:main',
+        'stat_publisher = senseis.publisher.stat_publisher:main',
+        'stat_writer = senseis.subscriber.stat_writer:main',
         'candle_backfiller = senseis.backfiller.candle_backfiller:main',
+        'printer = senseis.subscriber.printer:main',
     ]
   },
   scripts=[]
