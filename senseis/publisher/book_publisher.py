@@ -11,6 +11,7 @@ from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
 
 #TODO: how to do you deal with incomplete sets that build up over time ?
+#TODO: take care of 502 back gateway, and 524 more properly
 
 def get_period(args):
   if args.period < 1:
