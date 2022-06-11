@@ -139,7 +139,7 @@ async def candle_extraction_producer_writer(pids, exchange_name, start_date, end
     for pid in pids:
       producers.append(asyncio.create_task(candle_extraction(pid, start_date, end_date, session, que)))
     consumers = [asyncio.create_task(candle_writer(pids, exchange_name, start_date, end_date, s3bucket, s3outdir, que))]
-    await asyncio.gather(*producers, return_exceptions=True)
+    await asyncio.gather(*producers, return_exceptions=False)
     await que.join()
     #don't cancel consumer because there is more work there
 

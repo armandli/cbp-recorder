@@ -1,6 +1,7 @@
 import argparse
 import logging
 import json
+import math
 from datetime import datetime
 import pandas as pd
 import asyncio
@@ -21,12 +22,20 @@ def data_to_df(data, exchange_name):
   for row in data:
     for pid in pids:
       pid_data = json.loads(row[pid])
-      d[pid + ':' + 'open'].append(float(pid_data['open']))
-      d[pid + ':' + 'last'].append(float(pid_data['last']))
-      d[pid + ':' + 'high'].append(float(pid_data['high']))
-      d[pid + ':' + 'low'].append(float(pid_data['low']))
-      d[pid + ':' + 'volume'].append(float(pid_data['volume']))
-      d[pid + ':' + 'volume_30day'].append(float(pid_data['volume_30day']))
+      if not pid_data:
+        d[pid + ':' + 'open'].append(math.nan)
+        d[pid + ':' + 'last'].append(math.nan)
+        d[pid + ':' + 'high'].append(math.nan)
+        d[pid + ':' + 'low'].append(math.nan)
+        d[pid + ':' + 'volume'].append(math.nan)
+        d[pid + ':' + 'volume_30day'].append(math.nan)
+      else:
+        d[pid + ':' + 'open'].append(float(pid_data['open']))
+        d[pid + ':' + 'last'].append(float(pid_data['last']))
+        d[pid + ':' + 'high'].append(float(pid_data['high']))
+        d[pid + ':' + 'low'].append(float(pid_data['low']))
+        d[pid + ':' + 'volume'].append(float(pid_data['volume']))
+        d[pid + ':' + 'volume_30day'].append(float(pid_data['volume_30day']))
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)

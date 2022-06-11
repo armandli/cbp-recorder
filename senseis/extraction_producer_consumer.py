@@ -9,7 +9,7 @@ import aiohttp
 import aio_pika
 import aiobotocore.session as abcsession
 
-from senseis.configuration import DATETIME_FORMAT, MICROSECONDS, RETRY_TIME
+from senseis.configuration import DATETIME_FORMAT, MICROSECONDS, RETRY_TIME, NUM_RETRIES
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
 from senseis.configuration import S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
@@ -27,15 +27,30 @@ async def product_extraction_producer(url, pid, period, session, que):
   while True:
     time_record = datetime.now(utc)
     periodic_time = time_record - timedelta(microseconds=time_record.microsecond)
-    while True:
+    data_good = False
+    for _ in range(NUM_RETRIES):
       resp = await session.request(method="GET", url=url.format(pid), headers=header)
       if resp.ok:
+        data_good = True
         break
-      logging.info("Request {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, resp.status, resp.reason))
-      await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 10 milliseconds
-    data = await resp.text()
-    logging.debug("Enqueue {} {}".format(pid, periodic_time))
-    await que.put((periodic_time, time_record, pid, data))
+      if resp.status >= 300 and resp.status < 400:
+        logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
+        break
+      # one error code 400, 429 too many requests
+      elif resp.status >= 400 and resp.status < 500:
+        logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
+        break
+      # error code 524, 504
+      elif resp.status >= 500:
+        logging.info("Request {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, resp.status, resp.reason))
+        await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
+    if not data_good:
+      logging.info("Enqueue None {} {}".format(pid, periodic_time))
+      await que.put((periodic_time, time_record, pid, "\"\""))
+    else:
+      data = await resp.text()
+      logging.debug("Enqueue {} {}".format(pid, periodic_time))
+      await que.put((periodic_time, time_record, pid, data))
     t = datetime.now(utc)
     delta = t - periodic_time
     diff = MICROSECONDS * period - (delta.seconds * MICROSECONDS + delta.microseconds)
@@ -75,7 +90,7 @@ async def extraction_producer_consumer(producer, consumer, create_message, pids,
     for pid in pids:
       producers.append(asyncio.create_task(producer(url=url, pid=pid, period=period, session=session, que=que, **args)))
     consumers = [asyncio.create_task(consumer(pids=pids, exchange_name=exchange_name, create_message=create_message, que=que))]
-    await asyncio.gather(*producers, return_exceptions=True)
+    await asyncio.gather(*producers, return_exceptions=False)
     await que.join()
     for c in consumers:
       c.cancel()
@@ -90,7 +105,7 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
   que = asyncio.Queue()
   subscriber = asyncio.create_task(subscriber_f(exchange_name, que))
   writer = asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que))
-  await asyncio.gather(subscriber, return_exceptions=True)
+  await asyncio.gather(subscriber, return_exceptions=False)
   await que.join()
   writer.cancel()
 

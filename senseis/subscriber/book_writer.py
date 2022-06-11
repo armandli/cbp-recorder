@@ -1,6 +1,7 @@
 import argparse
 import logging
 import json
+import math
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -22,11 +23,16 @@ def data_to_df(data, exchange_name):
   for row in data:
     for pid in pids:
       pid_data = json.loads(row[pid])
-      bids = np.array(pid_data['bids'], dtype=np.float32).flatten()
-      asks = np.array(pid_data['asks'], dtype=np.float32).flatten()
-      d[pid + ':' + 'bids'].append(bids)
-      d[pid + ':' + 'asks'].append(asks)
-      d[pid + ':' + 'sequence'].append(int(pid_data['sequence']))
+      if not pid_data:
+        d[pid + ':' + 'bids'].append(np.array([]))
+        d[pid + ":" + 'asks'].append(np.array([]))
+        d[pid + ':' + 'sequence'].append(math.nan)
+      else:
+        bids = np.array(pid_data['bids'], dtype=np.float32).flatten()
+        asks = np.array(pid_data['asks'], dtype=np.float32).flatten()
+        d[pid + ':' + 'bids'].append(bids)
+        d[pid + ':' + 'asks'].append(asks)
+        d[pid + ':' + 'sequence'].append(int(pid_data['sequence']))
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)

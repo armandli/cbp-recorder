@@ -1,6 +1,7 @@
 import argparse
 import logging
 import json
+import math
 from datetime import datetime
 import pandas as pd
 import asyncio
@@ -21,13 +22,22 @@ def data_to_df(data, exchange_name):
   for row in data:
     for pid in pids:
       pid_data = json.loads(row[pid])
-      d[pid + ':' + 'bid'].append(float(pid_data['bid']))
-      d[pid + ':' + 'ask'].append(float(pid_data['ask']))
-      d[pid + ':' + 'volume'].append(float(pid_data['volume']))
-      d[pid + ':' + 'price'].append(float(pid_data['price']))
-      d[pid + ':' + 'size'].append(float(pid_data['size']))
-      d[pid + ':' + 'trade_id'].append(int(pid_data['trade_id']))
-      d[pid + ':' + 'time'].append(datetime.strptime(pid_data['time'], TICKER_TIME_FORMAT))
+      if not pid_data:
+        d[pid + ':' + 'bid'].append(math.nan)
+        d[pid + ':' + 'ask'].append(math.nan)
+        d[pid + ':' + 'volume'].append(math.nan)
+        d[pid + ':' + 'price'].append(math.nan)
+        d[pid + ':' + 'size'].append(math.nan)
+        d[pid + ':' + 'trade_id'].append(math.nan)
+        d[pid + ':' + 'time'].append(None)
+      else:
+        d[pid + ':' + 'bid'].append(float(pid_data['bid']))
+        d[pid + ':' + 'ask'].append(float(pid_data['ask']))
+        d[pid + ':' + 'volume'].append(float(pid_data['volume']))
+        d[pid + ':' + 'price'].append(float(pid_data['price']))
+        d[pid + ':' + 'size'].append(float(pid_data['size']))
+        d[pid + ':' + 'trade_id'].append(int(pid_data['trade_id']))
+        d[pid + ':' + 'time'].append(datetime.strptime(pid_data['time'], TICKER_TIME_FORMAT))
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)
