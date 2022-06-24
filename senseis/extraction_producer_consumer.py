@@ -59,29 +59,33 @@ async def product_extraction_producer(url, pid, period, session, que):
 async def extraction_consumer(pids, exchange_name, create_message, que):
   utc = pytz.timezone("UTC")
   records = dict()
-  mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
-  async with mq_connection:
-    channel = await mq_connection.channel()
-    exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
-    logging.info("Pushing to {}".format(exchange_name))
-    while True:
-      periodic_time, time_record, pid, data = await que.get()
-      if periodic_time in records:
-        records[periodic_time][pid] = data
-      else:
-        records[periodic_time] = {pid : data}
-      all_found = True
-      for known_pid in pids:
-        if known_pid not in records[periodic_time]:
-          all_found = False
-          break
-      if all_found:
-        body = create_message(periodic_time, time_record, records[periodic_time])
-        msg = aio_pika.Message(body=body)
-        logging.info("Sending {}".format(periodic_time))
-        await exchange.publish(message=msg, routing_key='')
-        records.pop(periodic_time, None)
-      que.task_done()
+  while True:
+    try:
+      mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
+      async with mq_connection:
+        channel = await mq_connection.channel()
+        exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
+        logging.info("Pushing to {}".format(exchange_name))
+        while True:
+          periodic_time, time_record, pid, data = await que.get()
+          if periodic_time in records:
+            records[periodic_time][pid] = data
+          else:
+            records[periodic_time] = {pid : data}
+          all_found = True
+          for known_pid in pids:
+            if known_pid not in records[periodic_time]:
+              all_found = False
+              break
+          if all_found:
+            body = create_message(periodic_time, time_record, records[periodic_time])
+            msg = aio_pika.Message(body=body)
+            logging.info("Sending {}".format(periodic_time))
+            await exchange.publish(message=msg, routing_key='')
+            records.pop(periodic_time, None)
+          que.task_done()
+    except asyncio.CancelledError as err:
+      logging.info("CancelledError {}".format(err))
 
 async def extraction_producer_consumer(producer, consumer, create_message, pids, url, period, exchange_name, **args):
   que = asyncio.Queue()
@@ -118,7 +122,7 @@ async def extraction_subscriber(exchange_name, que):
   handler = partial(push_to_queue, que)
   async with connection:
     channel = await connection.channel()
-    await channel.set_qos(prefetch_count=1) #needed ?
+    await channel.set_qos(prefetch_count=1) #TODO: needed ?
     exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
     queue = await channel.declare_queue('', auto_delete=True)
     await queue.bind(exchange=exchange)
