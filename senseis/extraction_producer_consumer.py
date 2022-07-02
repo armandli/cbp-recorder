@@ -90,14 +90,12 @@ async def extraction_consumer(pids, exchange_name, create_message, que):
 async def extraction_producer_consumer(producer, consumer, create_message, pids, url, period, exchange_name, **args):
   que = asyncio.Queue()
   async with aiohttp.ClientSession() as session:
-    producers = []
+    tasks = []
     for pid in pids:
-      producers.append(asyncio.create_task(producer(url=url, pid=pid, period=period, session=session, que=que, **args)))
-    consumers = [asyncio.create_task(consumer(pids=pids, exchange_name=exchange_name, create_message=create_message, que=que))]
-    await asyncio.gather(*producers, return_exceptions=False)
+      tasks.append(asyncio.create_task(producer(url=url, pid=pid, period=period, session=session, que=que, **args)))
+    tasks.append(asyncio.create_task(consumer(pids=pids, exchange_name=exchange_name, create_message=create_message, que=que)))
+    await asyncio.gather(*tasks, return_exceptions=False)
     await que.join()
-    for c in consumers:
-      c.cancel()
 
 def create_message(periodic_time, time_record, data):
   data[STIME_COLNAME] = periodic_time.strftime(DATETIME_FORMAT)
@@ -107,11 +105,12 @@ def create_message(periodic_time, time_record, data):
 
 async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity):
   que = asyncio.Queue()
-  subscriber = asyncio.create_task(subscriber_f(exchange_name, que))
-  writer = asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que))
-  await asyncio.gather(subscriber, return_exceptions=False)
+  tasks = [
+    asyncio.create_task(subscriber_f(exchange_name, que)),
+    asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que)),
+  ]
+  await asyncio.gather(*tasks, return_exceptions=False)
   await que.join()
-  writer.cancel()
 
 async def push_to_queue(que, msg: aio_pika.IncomingMessage):
   async with msg.process():
@@ -152,6 +151,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     end_epoch = (data_period + 1) * periodicity
     filename = s3outdir + '/' + exchange_name + '_' + str(start_epoch) + '_' + str(end_epoch) + '.parquet'
     logging.info("Write s3://{}/{}".format(s3bucket, filename))
+    #TODO: did it stuck here ? or somewhere else ?
     df = data_to_df_f(data, exchange_name)
     logging.info("Dataframe size {}".format(len(df)))
     data.clear()
