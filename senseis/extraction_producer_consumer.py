@@ -59,43 +59,47 @@ async def product_extraction_producer(url, pid, period, session, que):
 async def extraction_consumer(pids, exchange_name, create_message, que):
   utc = pytz.timezone("UTC")
   records = dict()
-  while True:
-    try:
-      mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
-      async with mq_connection:
-        channel = await mq_connection.channel()
-        exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
-        logging.info("Pushing to {}".format(exchange_name))
-        while True:
-          periodic_time, time_record, pid, data = await que.get()
-          if periodic_time in records:
-            records[periodic_time][pid] = data
-          else:
-            records[periodic_time] = {pid : data}
-          all_found = True
-          for known_pid in pids:
-            if known_pid not in records[periodic_time]:
-              all_found = False
-              break
-          if all_found:
-            body = create_message(periodic_time, time_record, records[periodic_time])
-            msg = aio_pika.Message(body=body)
-            logging.info("Sending {}".format(periodic_time))
-            await exchange.publish(message=msg, routing_key='')
-            records.pop(periodic_time, None)
-          que.task_done()
-    except asyncio.CancelledError as err:
-      logging.info("CancelledError {}".format(err))
+  mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
+  async with mq_connection:
+    channel = await mq_connection.channel()
+    exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
+    logging.info("Pushing to {}".format(exchange_name))
+    while True:
+      periodic_time, time_record, pid, data = await que.get()
+      if periodic_time in records:
+        records[periodic_time][pid] = data
+      else:
+        records[periodic_time] = {pid : data}
+      all_found = True
+      for known_pid in pids:
+        if known_pid not in records[periodic_time]:
+          all_found = False
+          break
+      if all_found:
+        body = create_message(periodic_time, time_record, records[periodic_time])
+        msg = aio_pika.Message(body=body)
+        logging.info("Sending {}".format(periodic_time))
+        await exchange.publish(message=msg, routing_key='')
+        records.pop(periodic_time, None)
+      que.task_done()
 
 async def extraction_producer_consumer(producer, consumer, create_message, pids, url, period, exchange_name, **args):
-  que = asyncio.Queue()
-  async with aiohttp.ClientSession() as session:
+  while True:
     tasks = []
-    for pid in pids:
-      tasks.append(asyncio.create_task(producer(url=url, pid=pid, period=period, session=session, que=que, **args)))
-    tasks.append(asyncio.create_task(consumer(pids=pids, exchange_name=exchange_name, create_message=create_message, que=que)))
-    await asyncio.gather(*tasks, return_exceptions=False)
-    await que.join()
+    try:
+      que = asyncio.Queue()
+      async with aiohttp.ClientSession() as session:
+        for pid in pids:
+          tasks.append(asyncio.create_task(producer(url=url, pid=pid, period=period, session=session, que=que, **args)))
+        tasks.append(asyncio.create_task(consumer(pids=pids, exchange_name=exchange_name, create_message=create_message, que=que)))
+        await asyncio.gather(*tasks, return_exceptions=False)
+        await que.join()
+    except asyncio.CancelledError as err:
+      logging.info("CancelledError {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
 
 def create_message(periodic_time, time_record, data):
   data[STIME_COLNAME] = periodic_time.strftime(DATETIME_FORMAT)
@@ -104,13 +108,20 @@ def create_message(periodic_time, time_record, data):
   return message.encode()
 
 async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity):
-  que = asyncio.Queue()
-  tasks = [
-    asyncio.create_task(subscriber_f(exchange_name, que)),
-    asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que)),
-  ]
-  await asyncio.gather(*tasks, return_exceptions=False)
-  await que.join()
+  tasks = []
+  while True:
+    try:
+      que = asyncio.Queue()
+      tasks.append(asyncio.create_task(subscriber_f(exchange_name, que)))
+      tasks.append(asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que)))
+      await asyncio.gather(*tasks, return_exceptions=False)
+      await que.join()
+    except asyncio.CancelledError as err:
+      logging.info("CancelledError {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
 
 async def push_to_queue(que, msg: aio_pika.IncomingMessage):
   async with msg.process():
