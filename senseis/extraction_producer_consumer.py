@@ -29,21 +29,24 @@ async def product_extraction_producer(url, pid, period, session, que):
     periodic_time = time_record - timedelta(microseconds=time_record.microsecond)
     data_good = False
     for _ in range(NUM_RETRIES):
-      resp = await session.request(method="GET", url=url.format(pid), headers=header)
-      if resp.ok:
-        data_good = True
-        break
-      if resp.status >= 300 and resp.status < 400:
-        logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-        break
-      # one error code 400, 429 too many requests
-      elif resp.status >= 400 and resp.status < 500:
-        logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-        break
-      # error code 524, 504
-      elif resp.status >= 500:
-        logging.info("Request {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, resp.status, resp.reason))
-        await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
+      try:
+        resp = await session.request(method="GET", url=url.format(pid), headers=header)
+        if resp.ok:
+          data_good = True
+          break
+        if resp.status >= 300 and resp.status < 400:
+          logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
+          break
+        # one error code 400, 429 too many requests
+        elif resp.status >= 400 and resp.status < 500:
+          logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
+          break
+        # error code 524, 504
+        elif resp.status >= 500:
+          logging.info("Request {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, resp.status, resp.reason))
+          await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
+      except asyncio.TimeoutError as err:
+        logging.info("TimeoutError {}".format(err))
     if not data_good:
       logging.info("Enqueue None {} {}".format(pid, periodic_time))
       await que.put((periodic_time, time_record, pid, "\"\""))
@@ -96,6 +99,18 @@ async def extraction_producer_consumer(producer, consumer, create_message, pids,
         await que.join()
     except asyncio.CancelledError as err:
       logging.info("CancelledError {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+    except aiohttp.client_exceptions.ClientOSError as err:
+      logging.info("ClientOSError {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+    except aiohttp.client_exceptions.ServerDisconnectedError as err:
+      logging.info("ServerDisconnectedError {}".format(err))
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
@@ -162,7 +177,6 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     end_epoch = (data_period + 1) * periodicity
     filename = s3outdir + '/' + exchange_name + '_' + str(start_epoch) + '_' + str(end_epoch) + '.parquet'
     logging.info("Write s3://{}/{}".format(s3bucket, filename))
-    #TODO: did it stuck here ? or somewhere else ?
     df = data_to_df_f(data, exchange_name)
     logging.info("Dataframe size {}".format(len(df)))
     data.clear()

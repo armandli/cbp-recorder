@@ -33,19 +33,22 @@ async def book_extraction(url, pid, period, session, que, level):
     periodic_time = time_record - timedelta(microseconds=time_record.microsecond)
     data_good = False
     for _ in range(NUM_RETRIES):
-      resp = await session.request(method="GET", url=url.format(pid), headers=header, params=params)
-      if resp.ok:
-        data_good = True
-        break
-      if resp.status >= 300 and resp.status < 400:
-        logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-        break
-      elif resp.status >= 400 and resp.status < 500:
-        logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-        break
-      elif resp.status >= 500:
-        logging.info("Request {} {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, periodic_time, resp.status, resp.reason))
-        await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
+      try:
+        resp = await session.request(method="GET", url=url.format(pid), headers=header, params=params)
+        if resp.ok:
+          data_good = True
+          break
+        if resp.status >= 300 and resp.status < 400:
+          logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
+          break
+        elif resp.status >= 400 and resp.status < 500:
+          logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
+          break
+        elif resp.status >= 500:
+          logging.info("Request {} {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, periodic_time, resp.status, resp.reason))
+          await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
+      except asyncio.TimeoutError as err:
+        logging.info("TimeoutError {}".format(err))
     if not data_good:
       logging.info("enqueue None {} {}".format(pid, periodic_time))
       await que.put((periodic_time, time_record, pid, "\"\""))
