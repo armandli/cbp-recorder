@@ -5,6 +5,7 @@ TICKER_TIME_FORMAT1 = "%Y-%m-%dT%H:%M:%S.%fZ"
 TICKER_TIME_FORMAT2 = "%Y-%m-%dT%H:%M:%SZ"
 MICROSECONDS = 1000000
 RETRY_TIME = 100000
+TRADE_SIZE_LIMIT = 1000
 NUM_RETRIES = 3
 
 QUEUE_HOST = ""
@@ -20,11 +21,13 @@ S3_SECRET = ""
 BOOK_REQUEST_URL = 'https://api.exchange.coinbase.com/products/{}/book'
 TICKER_REQUEST_URL = 'https://api.exchange.coinbase.com/products/{}/ticker'
 STAT_REQUEST_URL = 'https://api.exchange.coinbase.com/products/{}/stats'
+TRADE_REQUEST_URL = 'https://api.exchange.coinbase.com/products/{}/trades'
 
 BOOK_EXCHANGE_NAMES = ['book_level1_0','book_level1_1','book_level2_0','book_level2_1']
 CANDLE_EXCHANGE_NAMES = ['candle_exchange_0','candle_exchange_1']
 TICKER_EXCHANGE_NAMES = ['ticker_exchange_0', 'ticker_exchange_1']
 STAT_EXCHANGE_NAMES = ['stat_exchange_0', 'stat_exchange_1']
+TRADE_EXCHANGE_NAMES = ['trade_exchange_0', 'trade_exchange_1']
 
 EXCHANGE_PIDS = [
     ['BTC-USD','ETH-USD','MKR-USD','BCH-USD','COMP-USD','AAVE-USD','UNI-USD','CRV-USD','BAL-USD','LTC-USD'],
@@ -32,7 +35,7 @@ EXCHANGE_PIDS = [
     ['ETH2-USD'],
 ]
 
-OUTPATHS = {"book_level1": "book-lvl1", "book_level2": "book-lvl2", "candle": "candle", "ticker" : "ticker", "stat" : "stat"}
+OUTPATHS = {"book_level1": "book-lvl1", "book_level2": "book-lvl2", "candle": "candle", "ticker" : "ticker", "stat" : "stat", "trade" : "trade"}
 
 STIME_COLNAME = 'sequence_time'
 RTIME_COLNAME = 'record_time'
@@ -71,6 +74,12 @@ def is_stat_exchange_name(exchange_name):
   else:
     return False
 
+def is_trade_exchange_name(exchange_name):
+  if exchange_name in TRADE_EXCHANGE_NAMES:
+    return True
+  else:
+    return False
+
 def get_exchange_pids(exchange_name):
   idx = int(exchange_name.split('_')[2])
   return EXCHANGE_PIDS[idx]
@@ -100,5 +109,7 @@ def get_s3_outpath(exchange_name):
     return OUTPATHS['ticker']
   elif 'stat' in exchange_name:
     return OUTPATHS['stat']
+  elif 'trade' in exchange_name:
+    return OUTPATHS['trade']
   else:
     assert(False)

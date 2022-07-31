@@ -1,26 +1,67 @@
 import argparse
 import logging
+import json
 from datetime import datetime, timedelta
 import pytz
 import asyncio
 
-from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES
-from senseis.configuration import BOOK_REQUEST_URL
-from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_book_level
+from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES, TRADE_SIZE_LIMIT
+from senseis.configuration import TRADE_REQUEST_URL
+from senseis.configuration import is_trade_exchange_name, get_exchange_pids
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
 
-#TODO: how to do you deal with incomplete sets that build up over time ?
-
+#TODO: we can push this into utility
 def get_period(args):
   if args.period < 1:
     logging.error("Coinbase Pro rate limit would exceed, need periodicity >= 1, exiting")
   return args.period
 
-async def book_extraction(url, pid, period, session, que, level):
+def filter_trade_data(data, last_trade_id):
+  if last_trade_id is None:
+    return data
+  try:
+    data_dict = json.loads(data)
+    filtered_data_dict = []
+    for d in data_dict:
+      try:
+        if int(d['trade_id']) > last_trade_id:
+          filtered_data_dict.append(d)
+      except ValueError:
+        logging.error("Got empty trade id {}. skip".format(d))
+    out_data = json.dumps(filtered_data_dict)
+    return out_data
+  except json.decoder.JSONDecodeError:
+    return "\"\""
+  except TypeError:
+    return "\"\""
+
+def get_last_trade_id(data, last_trade_id):
+  if data is None:
+    return last_trade_id
+  try:
+    data_dict = json.loads(data)
+    if len(data_dict) == 0:
+      return last_trade_id
+    idx = 0
+    while idx < len(data_dict):
+      try:
+        trade_id = int(data_dict[idx]['trade_id'])
+        if last_trade_id is None:
+          return trade_id
+        return max(trade_id, last_trade_id)
+      except ValueError:
+        idx += 1
+    return last_trade_id
+  except json.decoder.JSONDecodeError:
+    return last_trade_id
+  except ValueError:
+    return last_trade_id
+
+async def trade_extraction(url, pid, period, session, que):
   # synchronize at the start of next second
   utc = pytz.timezone("UTC")
-  params = {"level":level}
+  params = {"limit" : TRADE_SIZE_LIMIT}
   header = {"Accept": "application/json"}
   t = datetime.now(utc)
   nxt_sec = t + timedelta(seconds=1)
@@ -28,6 +69,7 @@ async def book_extraction(url, pid, period, session, que, level):
   delta = nxt_sec - t
   await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
   logging.info("Starting {}".format(pid))
+  last_trade_id = None
   while True:
     time_record = datetime.now(utc)
     periodic_time = time_record - timedelta(microseconds=time_record.microsecond)
@@ -55,8 +97,12 @@ async def book_extraction(url, pid, period, session, que, level):
     else:
       try:
         data = await resp.text()
+        data = filter_trade_data(data, last_trade_id)
         logging.debug("enqueue {} {}".format(pid, periodic_time))
         await que.put((periodic_time, time_record, pid, data))
+        # update param for pagination
+        last_trade_id = get_last_trade_id(data, last_trade_id)
+        params = {"limit" : TRADE_SIZE_LIMIT, "after" : last_trade_id}
       except aiohttp.client_exception.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
         await que.put((periodic_time, time_record, pid, "\"\""))
@@ -69,22 +115,20 @@ def main():
   parser = build_publisher_parser()
   args = parser.parse_args()
   setup_logging(args)
-  if not is_book_exchange_name(args.exchange):
+  if not is_trade_exchange_name(args.exchange):
     logging.error("Invalid exchange name. exit.")
     return
   pids = get_exchange_pids(args.exchange)
-  level = get_book_level(args.exchange)
   period = get_period(args)
   asyncio.run(
     extraction_producer_consumer(
-      book_extraction,
+      trade_extraction,
       extraction_consumer,
       create_message,
       pids,
-      BOOK_REQUEST_URL,
+      TRADE_REQUEST_URL,
       period,
-      args.exchange,
-      level=level
+      args.exchange
     ))
 
 if __name__ == '__main__':

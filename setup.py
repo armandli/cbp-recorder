@@ -28,6 +28,8 @@ setup(
         'ticker_writer = senseis.subscriber.ticker_writer:main',
         'stat_publisher = senseis.publisher.stat_publisher:main',
         'stat_writer = senseis.subscriber.stat_writer:main',
+        'trade_publisher = senseis.publisher.trade_publisher:main',
+        'trade_writer = senseis.subscriber.trade_writer:main',
         'candle_backfiller = senseis.backfiller.candle_backfiller:main',
         'printer = senseis.subscriber.printer:main',
     ]

@@ -15,13 +15,13 @@ from senseis.configuration import S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 
 async def product_extraction_producer(url, pid, period, session, que):
-  # synchronize at the start of next minute
+  # synchronize at the start of next second
   utc = pytz.timezone("UTC")
   header = {"Accept": "application/json"}
   t = datetime.now(utc)
-  nxt_min = t + timedelta(seconds=60)
-  nxt_min = nxt_min - timedelta(seconds=nxt_min.second, microseconds=nxt_min.microsecond)
-  delta = nxt_min - t
+  nxt_sec = t + timedelta(seconds=1)
+  nxt_sec = nxt_sec - timedelta(seconds=0, microseconds=nxt_sec.microsecond)
+  delta = nxt_sec - t
   await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
   logging.info("Starting {}".format(pid))
   while True:
@@ -51,9 +51,13 @@ async def product_extraction_producer(url, pid, period, session, que):
       logging.info("Enqueue None {} {}".format(pid, periodic_time))
       await que.put((periodic_time, time_record, pid, "\"\""))
     else:
-      data = await resp.text()
-      logging.debug("Enqueue {} {}".format(pid, periodic_time))
-      await que.put((periodic_time, time_record, pid, data))
+      try:
+        data = await resp.text()
+        logging.debug("Enqueue {} {}".format(pid, periodic_time))
+        await que.put((periodic_time, time_record, pid, data))
+      except aiohttp.client_exception.ClientPayloadError as err:
+        logging.error("Client Payload Error {}".format(err))
+        await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)
     delta = t - periodic_time
     diff = MICROSECONDS * period - (delta.seconds * MICROSECONDS + delta.microseconds)
