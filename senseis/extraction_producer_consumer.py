@@ -55,7 +55,7 @@ async def product_extraction_producer(url, pid, period, session, que):
         data = await resp.text()
         logging.debug("Enqueue {} {}".format(pid, periodic_time))
         await que.put((periodic_time, time_record, pid, data))
-      except aiohttp.client_exception.ClientPayloadError as err:
+      except aiohttp.client_exceptions.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
         await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)
