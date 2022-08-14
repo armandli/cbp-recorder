@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timedelta
 import pytz
 import asyncio
+import aiohttp
+from sortedcontainers import SortedSet
 
 from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES, TRADE_SIZE_LIMIT
 from senseis.configuration import TRADE_REQUEST_URL
@@ -17,15 +19,15 @@ def get_period(args):
     logging.error("Coinbase Pro rate limit would exceed, need periodicity >= 1, exiting")
   return args.period
 
-def filter_trade_data(data, last_trade_id):
-  if last_trade_id is None:
+def filter_trade_data(data, last_trade_ids):
+  if not last_trade_ids:
     return data
   try:
     data_dict = json.loads(data)
     filtered_data_dict = []
     for d in data_dict:
       try:
-        if int(d['trade_id']) > last_trade_id:
+        if int(d['trade_id']) not in last_trade_ids:
           filtered_data_dict.append(d)
       except ValueError:
         logging.error("Got empty trade id {}. skip".format(d))
@@ -36,27 +38,28 @@ def filter_trade_data(data, last_trade_id):
   except TypeError:
     return "\"\""
 
-def get_last_trade_id(data, last_trade_id):
+def get_last_trade_ids(data, last_trade_ids):
   if data is None:
-    return last_trade_id
+    return last_trade_ids
   try:
     data_dict = json.loads(data)
     if len(data_dict) == 0:
-      return last_trade_id
-    idx = 0
-    while idx < len(data_dict):
+      return last_trade_ids
+    for d in data_dict:
       try:
-        trade_id = int(data_dict[idx]['trade_id'])
-        if last_trade_id is None:
-          return trade_id
-        return max(trade_id, last_trade_id)
+        last_trade_ids.add(int(d['trade_id']))
       except ValueError:
-        idx += 1
-    return last_trade_id
+        pass
   except json.decoder.JSONDecodeError:
-    return last_trade_id
+    return last_trade_ids
   except ValueError:
-    return last_trade_id
+    return last_trade_ids
+
+  # clean up the set to avoid memory buildup
+  while len(last_trade_ids) > 2000:
+    last_trade_ids.pop(0)
+
+  return last_trade_ids
 
 async def trade_extraction(url, pid, period, session, que):
   # synchronize at the start of next second
@@ -69,7 +72,7 @@ async def trade_extraction(url, pid, period, session, que):
   delta = nxt_sec - t
   await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
   logging.info("Starting {}".format(pid))
-  last_trade_id = None
+  last_trade_ids = SortedSet()
   while True:
     time_record = datetime.now(utc)
     periodic_time = time_record - timedelta(microseconds=time_record.microsecond)
@@ -97,13 +100,12 @@ async def trade_extraction(url, pid, period, session, que):
     else:
       try:
         data = await resp.text()
-        data = filter_trade_data(data, last_trade_id)
+        data = filter_trade_data(data, last_trade_ids)
         logging.debug("enqueue {} {}".format(pid, periodic_time))
         await que.put((periodic_time, time_record, pid, data))
         # update param for pagination
-        last_trade_id = get_last_trade_id(data, last_trade_id)
-        params = {"limit" : TRADE_SIZE_LIMIT, "after" : last_trade_id}
-      except aiohttp.client_exception.ClientPayloadError as err:
+        last_trade_ids = get_last_trade_ids(data, last_trade_ids)
+      except aiohttp.client_exceptions.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
         await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)

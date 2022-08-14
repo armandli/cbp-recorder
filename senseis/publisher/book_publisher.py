@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 import pytz
 import asyncio
+import aiohttp
 
 from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES
 from senseis.configuration import BOOK_REQUEST_URL
@@ -57,7 +58,7 @@ async def book_extraction(url, pid, period, session, que, level):
         data = await resp.text()
         logging.debug("enqueue {} {}".format(pid, periodic_time))
         await que.put((periodic_time, time_record, pid, data))
-      except aiohttp.client_exception.ClientPayloadError as err:
+      except aiohttp.client_exceptions.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
         await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)

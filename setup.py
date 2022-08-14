@@ -11,6 +11,7 @@ setup(
   package_data={},
   data_files={},
   install_requires=[
+      'sortedcontainers',
       'pytz',
       'aio-pika',
       'aiohttp',
