@@ -7,7 +7,7 @@ import asyncio
 import aiohttp
 from sortedcontainers import SortedSet
 
-from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES, TRADE_SIZE_LIMIT
+from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES, TRADE_SIZE_LIMIT, MAX_TRADE_ID_SET_SIZE
 from senseis.configuration import TRADE_REQUEST_URL
 from senseis.configuration import is_trade_exchange_name, get_exchange_pids
 from senseis.utility import setup_logging, build_publisher_parser
@@ -56,7 +56,7 @@ def get_last_trade_ids(data, last_trade_ids):
     return last_trade_ids
 
   # clean up the set to avoid memory buildup
-  while len(last_trade_ids) > 2000:
+  while len(last_trade_ids) > MAX_TRADE_ID_SET_SIZE:
     last_trade_ids.pop(0)
 
   return last_trade_ids
