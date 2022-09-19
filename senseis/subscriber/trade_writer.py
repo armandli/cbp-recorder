@@ -20,34 +20,42 @@ def convert_trade_time(time_str):
     return datetime.strptime(time_str, TICKER_TIME_FORMAT2)
 
 def data_to_df(data, exchange_name):
-  pids = get_exchange_pids(exchange_name)
-  columns = ["pid", STIME_COLNAME, RTIME_COLNAME, "time", "trade_id", "price", "size", "side"]
-  d = {colname : [] for colname in columns}
-  for row in data:
-    for pid in pids:
-      pid_data = json.loads(row[pid])
-      if pid_data:
-        for i in range(-1, -1 * len(pid_data) - 1, -1):
-          trade = pid_data[i]
-          try:
-            trade_id = int(trade['trade_id'])
-            trade_time = convert_trade_time(trade['time'])
-            trade_price = float(trade['price'])
-            trade_size = float(trade['size'])
-            trade_side = trade['side']
-          except ValueError:
-            logging.error("Unable to convert trade data {}. data skipped".format(trade))
-            continue
-          d["pid"].append(pid)
-          d[STIME_COLNAME].append(row[STIME_COLNAME])
-          d[RTIME_COLNAME].append(row[RTIME_COLNAME])
-          d['time'].append(trade_time)
-          d['trade_id'].append(trade_id)
-          d['price'].append(trade_price)
-          d['size'].append(trade_size)
-          d['side'].append(trade_side)
-  df = pd.DataFrame(data=d)
-  return df
+  try:
+    pids = get_exchange_pids(exchange_name)
+    columns = ["pid", STIME_COLNAME, RTIME_COLNAME, "time", "trade_id", "price", "size", "side"]
+    d = {colname : [] for colname in columns}
+    for row in data:
+      for pid in pids:
+        pid_data = json.loads(row[pid])
+        if pid_data:
+          for i in range(-1, -1 * len(pid_data) - 1, -1):
+            trade = pid_data[i]
+            try:
+              trade_id = int(trade['trade_id'])
+              trade_time = convert_trade_time(trade['time'])
+              trade_price = float(trade['price'])
+              trade_size = float(trade['size'])
+              trade_side = trade['side']
+            except ValueError:
+              logging.error("Unable to convert trade data {}. data skipped".format(trade))
+              continue
+            d["pid"].append(pid)
+            d[STIME_COLNAME].append(row[STIME_COLNAME])
+            d[RTIME_COLNAME].append(row[RTIME_COLNAME])
+            d['time'].append(trade_time)
+            d['trade_id'].append(trade_id)
+            d['price'].append(trade_price)
+            d['size'].append(trade_size)
+            d['side'].append(trade_side)
+    df = pd.DataFrame(data=d)
+    return df
+  except Exception as e:
+    logging.error("Unknown exception {}. creating empty data frame.".format(e))
+    pids = get_exchange_pids(exchange_name)
+    columns = ["pid", STIME_COLNAME, RTIME_COLNAME, "time", "trade_id", "price", "size", "side"]
+    d = {colname : [] for colname in columns}
+    df = pd.DataFrame(data=d)
+    return df
 
 def main():
   parser = build_subscriber_parser()

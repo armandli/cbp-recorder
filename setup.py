@@ -20,6 +20,8 @@ setup(
       'pandas',
       'pyarrow',
       'numpy',
+      'boto3',
+      's3fs',
   ],
   entry_points={
     'console_scripts':[
