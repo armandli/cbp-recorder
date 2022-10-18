@@ -9,4 +9,4 @@ ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/acti
 Restart=on-failure
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

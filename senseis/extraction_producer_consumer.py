@@ -4,6 +4,7 @@ import json
 import pytz
 from datetime import datetime, timedelta
 from functools import partial
+import botocore
 import asyncio
 import aiohttp
 import aio_pika
@@ -13,6 +14,7 @@ from senseis.configuration import DATETIME_FORMAT, MICROSECONDS, RETRY_TIME, NUM
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
 from senseis.configuration import S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
+from senseis.configuration import S3_RETRY_TIME_SECOND
 
 async def product_extraction_producer(url, pid, period, session, que):
   # synchronize at the start of next second
@@ -189,6 +191,12 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     parquet_buffer = BytesIO()
     df.to_parquet(parquet_buffer, index=False)
     session = abcsession.get_session()
-    async with session.create_client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET) as client:
-      resp = await client.put_object(Bucket=s3bucket, Key=filename, Body=parquet_buffer.getvalue())
-      logging.info(resp)
+    while True:
+      try:
+        async with session.create_client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET) as client:
+          resp = await client.put_object(Bucket=s3bucket, Key=filename, Body=parquet_buffer.getvalue())
+          logging.info(resp)
+          break
+      except botocore.exceptions.ClientError as err:
+        logging.info("botocore ClientError: {}".format(err))
+        await asyncio.sleep(S3_RETRY_TIME_SECOND)
