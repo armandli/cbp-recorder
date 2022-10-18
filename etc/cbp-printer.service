@@ -1,0 +1,12 @@
+[Unit]
+Description=cbp-printer
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/armandli/cbp-recorder
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && ./env/bin/printer --exchange book_level1_0 --logfile printer.log'
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

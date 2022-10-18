@@ -1,0 +1,11 @@
+[Unit]
+Description=cbp-book-level1-1-writer
+After=network.target
+
+[Service]
+WorkingDirectory=/home/armandli/cbp-recorder
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && book_writer --period 360 --exchange book_level1_1 --logfile writer.log'
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

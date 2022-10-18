@@ -1,0 +1,11 @@
+[Unit]
+Description=cbp-trade-0-publisher
+After=network.target
+
+[Service]
+WorkingDirectory=/home/armandli/cbp-recorder
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && trade_publisher --exchange trade_exchange_0 --logfile publisher.log'
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
