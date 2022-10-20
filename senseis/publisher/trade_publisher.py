@@ -12,6 +12,7 @@ from senseis.configuration import TRADE_REQUEST_URL
 from senseis.configuration import is_trade_exchange_name, get_exchange_pids
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
+from senseis.metric_utility import setup_gateway, create_live_gauge
 
 #TODO: we can push this into utility
 def get_period(args):
@@ -122,6 +123,8 @@ def main():
     return
   pids = get_exchange_pids(args.exchange)
   period = get_period(args)
+  setup_gateway('cbp_{}_publisher'.format(args.exchange))
+  create_live_gauge('cbp_{}_publisher'.format(args.exchange))
   asyncio.run(
     extraction_producer_consumer(
       trade_extraction,

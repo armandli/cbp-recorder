@@ -10,6 +10,7 @@ from senseis.configuration import BOOK_REQUEST_URL
 from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_book_level
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
+from senseis.metric_utility import setup_gateway, create_live_gauge
 
 #TODO: how to do you deal with incomplete sets that build up over time ?
 
@@ -76,6 +77,8 @@ def main():
   pids = get_exchange_pids(args.exchange)
   level = get_book_level(args.exchange)
   period = get_period(args)
+  setup_gateway('cbp_{}_publisher'.format(args.exchange))
+  create_live_gauge('cbp_{}_publisher'.format(args.exchange))
   asyncio.run(
     extraction_producer_consumer(
       book_extraction,

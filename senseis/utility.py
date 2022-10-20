@@ -3,7 +3,7 @@ import logging
 
 def setup_logging(args):
   logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
+  logger.setLevel(logging.INFO)
   fhandler = logging.FileHandler(args.logfile, mode='w')
   formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-5s %(message)s', datefmt='%H:%M:%s')
   fhandler.setFormatter(formatter)

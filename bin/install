@@ -1,0 +1,20 @@
+#!/bin/sh
+
+if [[ $# -ne 2 ]]; then
+  echo "Usage: install <name>"
+  echo "Example: install ticker_exchange_0_publisher"
+  exit 1
+fi
+
+APP_NAME=$1
+
+mkdir -p $HOME/.config/systemd/user
+
+cp etc/${APP_NAME}.service $HOME/.config/systemd/user/
+
+systemctl --user enable ${APP_NAME}.service
+systemctl --user start ${APP_NAME}.service
+systemctl --user status ${APP_NAME}.service
+
+#NOTE: need to enable user with this following, otherwise service may not start until user logged in
+#sudo loginctl enable-linger $USER

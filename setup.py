@@ -22,6 +22,7 @@ setup(
       'numpy',
       'boto3',
       's3fs',
+      'prometheus-client',
   ],
   entry_points={
     'console_scripts':[

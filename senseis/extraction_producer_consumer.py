@@ -10,11 +10,15 @@ import aiohttp
 import aio_pika
 import aiobotocore.session as abcsession
 
+from prometheus_client import push_to_gateway
+
 from senseis.configuration import DATETIME_FORMAT, MICROSECONDS, RETRY_TIME, NUM_RETRIES
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
 from senseis.configuration import S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import S3_RETRY_TIME_SECOND
+from senseis.metric_utility import GATEWAY_URL
+from senseis.metric_utility import get_collector_registry, get_job_name, get_live_gauge, get_write_success_gauge, get_row_count_gauge
 
 async def product_extraction_producer(url, pid, period, session, que):
   # synchronize at the start of next second
@@ -89,6 +93,8 @@ async def extraction_consumer(pids, exchange_name, create_message, que):
         msg = aio_pika.Message(body=body)
         logging.info("Sending {}".format(periodic_time))
         await exchange.publish(message=msg, routing_key='')
+        get_live_gauge().set_to_current_time()
+        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         records.pop(periodic_time, None)
       que.task_done()
 
@@ -176,6 +182,8 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
       data_period = dat_period
     if data_period == dat_period:
       data.append(dat)
+      get_live_gauge().set_to_current_time()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       logging.info("Received {}".format(dat[STIME_COLNAME]))
       que.task_done()
       continue
@@ -195,6 +203,9 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
       try:
         async with session.create_client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET) as client:
           resp = await client.put_object(Bucket=s3bucket, Key=filename, Body=parquet_buffer.getvalue())
+          get_write_success_gauge().set_to_current_time()
+          get_row_count_gauge().set(len(df))
+          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           logging.info(resp)
           break
       except botocore.exceptions.ClientError as err:

@@ -3,8 +3,12 @@ import logging
 import asyncio
 import aio_pika
 
+from prometheus_client import push_to_gateway
+
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD, is_valid_exchange_name
 from senseis.utility import setup_logging
+from senseis.metric_utility import GATEWAY_URL
+from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, create_live_gauge, get_live_gauge
 
 def build_parser():
   parser = argparse.ArgumentParser(description='')
@@ -14,6 +18,8 @@ def build_parser():
 
 async def write_book(msg: aio_pika.IncomingMessage):
   async with msg.process():
+    get_live_gauge().set_to_current_time()
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     print(msg.body)
 
 async def consume_book(exchange_name):
@@ -35,6 +41,8 @@ def main():
   if not is_valid_exchange_name(args.exchange):
     logging.error("Invalid exchange. exit.")
     return
+  setup_gateway('cbp_printer_{}'.format(args.exchange))
+  create_live_gauge('cbp_printer_{}'.format(args.exchange))
   asyncio.run(consume_book(args.exchange))
 
 if __name__ == '__main__':

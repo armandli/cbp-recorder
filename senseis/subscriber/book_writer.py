@@ -12,6 +12,7 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
+from senseis.metric_utility import setup_gateway, create_live_gauge, create_write_success_gauge, create_row_count_gauge
 
 def data_to_df(data, exchange_name):
   pids = get_exchange_pids(exchange_name)
@@ -47,6 +48,10 @@ def main():
     return
   s3bucket = get_s3_bucket(args.exchange)
   s3outdir = get_s3_outpath(args.exchange)
+  setup_gateway('cbp_{}_writer'.format(args.exchange))
+  create_live_gauge('cbp_{}_writer'.format(args.exchange))
+  create_write_success_gauge('cbp_{}_writer'.format(args.exchange))
+  create_row_count_gauge('cbp_{}_writer'.format(args.exchange))
   asyncio.run(
     consume_extraction(
         extraction_subscriber,
