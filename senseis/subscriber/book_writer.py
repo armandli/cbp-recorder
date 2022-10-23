@@ -26,7 +26,7 @@ def data_to_df(data, exchange_name):
       pid_data = json.loads(row[pid])
       if not pid_data:
         d[pid + ':' + 'bids'].append(np.array([], dtype=np.float32))
-        d[pid + ":" + 'asks'].append(np.array([], dtype=np.float32))
+        d[pid + ':' + 'asks'].append(np.array([], dtype=np.float32))
         d[pid + ':' + 'sequence'].append(math.nan)
       else:
         bids = np.array(pid_data['bids'], dtype=np.float32).flatten()

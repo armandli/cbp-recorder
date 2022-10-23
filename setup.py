@@ -28,6 +28,8 @@ setup(
     'console_scripts':[
         'book_publisher = senseis.publisher.book_publisher:main',
         'book_writer = senseis.subscriber.book_writer:main',
+        'book_level2s1_publisher = senseis.publisher.book_level2s1_publisher:main',
+        'book_level2s1_writer = senseis.subscriber.book_level2s1_writer:main',
         'ticker_publisher = senseis.publisher.ticker_publisher:main',
         'ticker_writer = senseis.subscriber.ticker_writer:main',
         'stat_publisher = senseis.publisher.stat_publisher:main',

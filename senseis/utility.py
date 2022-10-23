@@ -22,7 +22,7 @@ def build_publisher_parser():
 
 def build_subscriber_parser():
   parser = argparse.ArgumentParser(description='')
-  parser.add_argument('--period', type=int, help='output period, in minutes', default=1440)
+  parser.add_argument('--period', type=int, help='output period, in minutes', default=360)
   parser.add_argument('--exchange', type=str, help='queue exchange name', required=True)
   parser.add_argument('--logfile', type=str, help='logfile path', required=True)
   return parser
