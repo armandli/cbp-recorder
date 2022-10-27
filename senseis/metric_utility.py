@@ -34,3 +34,10 @@ def create_row_count_gauge(app_name):
 
 def get_row_count_gauge():
   return ROW_COUNT_GAUGE
+
+def create_error_gauge(app_name):
+  global ERROR_GAUGE
+  ERROR_GAUGE = Gauge(app_name + '_error_count', "number of errors", registry=get_collector_registry())
+
+def get_error_gauge():
+  return ERROR_GAUGE

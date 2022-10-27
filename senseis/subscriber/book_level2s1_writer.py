@@ -12,13 +12,16 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
-from senseis.metric_utility import setup_gateway, create_live_gauge, create_write_success_gauge, create_row_count_gauge
+from senseis.metric_utility import setup_gateway, create_live_gauge, create_write_success_gauge, create_row_count_gauge, create_error_gauge, get_error_gauge
 
 # special writer that compress the amount of data in book level2
 # determine how many levels of bids and asks we take per second based on market trading volume
 # by default we take 6 levels
 
-DEFAULT_TAKE_LEVEL = 6
+# TODO: due to unsolvable issue, we simply logic to filter for only first 20 levels
+
+#DEFAULT_TAKE_LEVEL = 6
+DEFAULT_TAKE_LEVEL = 20
 
 def create_ba_state(exchange_name):
   pids = get_exchange_pids(exchange_name)
@@ -38,20 +41,20 @@ def compute_take_level(pid, cur_bids, cur_asks):
       try:
         missing_volume += float(last_bids[lidx][1])
       except ValueError:
-        pass
+        get_error_gauge().inc()
       lidx += 1
     if lidx < len(last_bids) and float(last_bids[lidx][0]) == float(cur_bids[0][0]):
       try:
         missing_volume += max(0., float(last_bids[lidx][1]) - float(cur_bids[0][1]))
       except ValueError:
-        pass
+        get_error_gauge().inc()
     level_count = 0
     cidx = 0
     while cidx < len(cur_bids) and missing_volume > 0.:
       try:
         missing_volume -= float(cur_bids[cidx][1])
       except ValueError:
-        pass
+        get_error_gauge().inc()
       level_count += 1
       cidx += 1
     blevel = max(DEFAULT_TAKE_LEVEL, int(level_count * 1.5))
@@ -66,20 +69,20 @@ def compute_take_level(pid, cur_bids, cur_asks):
       try:
         missing_volume += float(last_asks[lidx][1])
       except ValueError:
-        pass
+        get_error_gauge().inc()
       lidx += 1
     if lidx < len(last_asks) and float(last_asks[lidx][0]) == float(cur_asks[0][0]):
       try:
         missing_volume += max(0., float(last_asks[lidx][1]) - float(cur_asks[0][1]))
       except ValueError:
-        pass
+        get_error_gauge().inc()
     level_count = 0
     cidx = 0
     while cidx < len(cur_asks) and missing_volume > 0.:
       try:
         missing_volume -= float(cur_asks[cidx][1])
       except ValueError:
-        pass
+        get_error_gauge().inc()
       level_count += 1
       cidx += 1
     alevel = max(DEFAULT_TAKE_LEVEL, int(level_count * 1.5))
@@ -104,10 +107,12 @@ def data_to_df(data, exchange_name):
         d[pid + ':' + 'asks'].append(np.array([], dtype=np.float32))
         d[pid + ':' + 'sequence'].append(math.nan)
       else:
-        cur_bids = pid_data['bids']
-        cur_asks = pid_data['asks']
-        bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
-        set_last_bids_asks(pid, cur_bids, cur_asks)
+#        cur_bids = pid_data['bids']
+#        cur_asks = pid_data['asks']
+#        bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
+#        set_last_bids_asks(pid, cur_bids, cur_asks)
+        bid_level = DEFAULT_TAKE_LEVEL
+        ask_level = DEFAULT_TAKE_LEVEL
         taking_bids = [b[:2] for b in pid_data['bids'][:bid_level]]
         taking_asks = [a[:2] for a in pid_data['asks'][:ask_level]]
         d[pid + ':' + 'bids'].append(np.array(taking_bids, dtype=np.float32).flatten())
@@ -133,6 +138,7 @@ def main():
   create_live_gauge(app_name)
   create_write_success_gauge(app_name)
   create_row_count_gauge(app_name)
+  create_error_gauge(app_name)
   asyncio.run(
     consume_extraction(
         extraction_subscriber,
