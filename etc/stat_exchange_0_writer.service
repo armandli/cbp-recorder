@@ -5,6 +5,9 @@ After=network.target
 [Service]
 WorkingDirectory=/home/armandli/cbp-recorder
 ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && stat_writer --period 360 --exchange stat_exchange_0 --logfile publisher.log'
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=file:/home/armandli/cbp-recorder/writer_io.log
+StandardError=inherit
 Restart=on-failure
 
 [Install]
