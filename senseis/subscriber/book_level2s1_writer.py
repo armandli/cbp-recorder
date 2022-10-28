@@ -20,8 +20,7 @@ from senseis.metric_utility import setup_gateway, create_live_gauge, create_writ
 
 # TODO: due to unsolvable issue, we simply logic to filter for only first 20 levels
 
-#DEFAULT_TAKE_LEVEL = 6
-DEFAULT_TAKE_LEVEL = 20
+DEFAULT_TAKE_LEVEL = 6
 
 def create_ba_state(exchange_name):
   pids = get_exchange_pids(exchange_name)

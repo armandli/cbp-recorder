@@ -16,7 +16,7 @@ from senseis.metric_utility import setup_gateway, create_live_gauge, create_erro
 # book level2 summary publisher, book level2 has too much information, and needs to be cut down to avoid
 # overflowing queue
 
-LEVEL_CAP = 80
+LEVEL_CAP = 30
 
 def get_period(args):
   if args.period < 1:
