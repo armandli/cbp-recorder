@@ -69,6 +69,10 @@ async def product_extraction_producer(url, pid, period, session, que):
         logging.error("Client Payload Error {}".format(err))
         get_error_gauge().inc()
         await que.put((periodic_time, time_record, pid, "\"\""))
+      except asyncio.exceptions.TimeoutError as err:
+        logging.error("Timeout Error {}".format(err))
+        get_error_gauge().inc()
+        await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)
     delta = t - periodic_time
     diff = MICROSECONDS * period - (delta.seconds * MICROSECONDS + delta.microseconds)
