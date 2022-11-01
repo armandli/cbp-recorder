@@ -18,8 +18,6 @@ from senseis.metric_utility import setup_gateway, create_live_gauge, create_writ
 # determine how many levels of bids and asks we take per second based on market trading volume
 # by default we take 6 levels
 
-# TODO: due to unsolvable issue, we simply logic to filter for only first 20 levels
-
 DEFAULT_TAKE_LEVEL = 6
 
 def create_ba_state(exchange_name):
@@ -56,7 +54,7 @@ def compute_take_level(pid, cur_bids, cur_asks):
         get_error_gauge().inc()
       level_count += 1
       cidx += 1
-    blevel = max(DEFAULT_TAKE_LEVEL, int(level_count * 1.5))
+    blevel = max(DEFAULT_TAKE_LEVEL, int(level_count))
 
   last_asks = last_pid_asks[pid]
   if last_asks is None or len(cur_asks) == 0:
@@ -84,7 +82,7 @@ def compute_take_level(pid, cur_bids, cur_asks):
         get_error_gauge().inc()
       level_count += 1
       cidx += 1
-    alevel = max(DEFAULT_TAKE_LEVEL, int(level_count * 1.5))
+    alevel = max(DEFAULT_TAKE_LEVEL, int(level_count))
   return (blevel, alevel)
 
 def set_last_bids_asks(pid, cur_bids, cur_asks):
@@ -106,12 +104,10 @@ def data_to_df(data, exchange_name):
         d[pid + ':' + 'asks'].append(np.array([], dtype=np.float32))
         d[pid + ':' + 'sequence'].append(math.nan)
       else:
-#        cur_bids = pid_data['bids']
-#        cur_asks = pid_data['asks']
-#        bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
-#        set_last_bids_asks(pid, cur_bids, cur_asks)
-        bid_level = DEFAULT_TAKE_LEVEL
-        ask_level = DEFAULT_TAKE_LEVEL
+        cur_bids = pid_data['bids']
+        cur_asks = pid_data['asks']
+        bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
+        set_last_bids_asks(pid, cur_bids, cur_asks)
         taking_bids = [b[:2] for b in pid_data['bids'][:bid_level]]
         taking_asks = [a[:2] for a in pid_data['asks'][:ask_level]]
         d[pid + ':' + 'bids'].append(np.array(taking_bids, dtype=np.float32).flatten())
