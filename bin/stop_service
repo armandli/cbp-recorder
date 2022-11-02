@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: stop_service <name>"
+  echo "Example: stop_service ticker_exchange_0_publisher"
+  exit 1
+fi
+
+APP_NAME=$1
+
+systemctl --user stop ${APP_NAME}.service
