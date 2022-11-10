@@ -10,15 +10,15 @@ TRADE_SIZE_LIMIT = 1000
 MAX_TRADE_ID_SET_SIZE = 60000
 NUM_RETRIES = 3
 
-QUEUE_HOST = ""
-QUEUE_PORT = ""
-QUEUE_USER = ""
-QUEUE_PASSWORD = ""
+QUEUE_HOST =
+QUEUE_PORT =
+QUEUE_USER =
+QUEUE_PASSWORD =
 
-S3_ENDPOINT = ""
-S3_BUCKET = ""
-S3_KEY = ""
-S3_SECRET = ""
+S3_ENDPOINT =
+S3_BUCKET =
+S3_KEY =
+S3_SECRET =
 
 BOOK_REQUEST_URL = 'https://api.exchange.coinbase.com/products/{}/book'
 TICKER_REQUEST_URL = 'https://api.exchange.coinbase.com/products/{}/ticker'
@@ -30,6 +30,7 @@ CANDLE_EXCHANGE_NAMES = ['candle_exchange_0','candle_exchange_1']
 TICKER_EXCHANGE_NAMES = ['ticker_exchange_0', 'ticker_exchange_1']
 STAT_EXCHANGE_NAMES = ['stat_exchange_0', 'stat_exchange_1']
 TRADE_EXCHANGE_NAMES = ['trade_exchange_0', 'trade_exchange_1']
+ETL_EXCHANGE_NAMES = ['etl_s1']
 
 EXCHANGE_PIDS = [
     ['BTC-USD','ETH-USD','MKR-USD','BCH-USD','COMP-USD','AAVE-USD','UNI-USD','CRV-USD','BAL-USD','LTC-USD'],
@@ -37,7 +38,15 @@ EXCHANGE_PIDS = [
     ['ETH2-USD'],
 ]
 
-OUTPATHS = {"book_level1": "book-lvl1", "book_level2": "book-lvl2", "candle": "candle", "ticker" : "ticker", "stat" : "stat", "trade" : "trade"}
+OUTPATHS = {
+    "book_level1": "book-lvl1",
+    "book_level2": "book-lvl2",
+    "candle": "candle",
+    "ticker" : "ticker",
+    "stat" : "stat",
+    "trade" : "trade",
+    "etl_s1" : "etl_s1",
+}
 
 STIME_COLNAME = 'sequence_time'
 RTIME_COLNAME = 'record_time'
@@ -82,6 +91,12 @@ def is_trade_exchange_name(exchange_name):
   else:
     return False
 
+def is_etl_exchange_name(exchange_name):
+  if exchange_name in ETL_EXCHANGE_NAMES:
+    return True
+  else:
+    return False
+
 def get_exchange_pids(exchange_name):
   idx = int(exchange_name.split('_')[2])
   return EXCHANGE_PIDS[idx]
@@ -113,5 +128,7 @@ def get_s3_outpath(exchange_name):
     return OUTPATHS['stat']
   elif 'trade' in exchange_name:
     return OUTPATHS['trade']
+  elif 'etl' in exchange_name:
+    return OUTPATHS[exchange_name]
   else:
     assert(False)

@@ -132,16 +132,20 @@ def main():
   setup_gateway('cbp_{}_publisher'.format(args.exchange))
   create_live_gauge('cbp_{}_publisher'.format(args.exchange))
   create_error_gauge('cbp_{}_publisher'.format(args.exchange))
-  asyncio.run(
-    extraction_producer_consumer(
-      trade_extraction,
-      extraction_consumer,
-      create_message,
-      pids,
-      TRADE_REQUEST_URL,
-      period,
-      args.exchange
-    ))
+  try:
+    asyncio.run(
+      extraction_producer_consumer(
+        trade_extraction,
+        extraction_consumer,
+        create_message,
+        pids,
+        TRADE_REQUEST_URL,
+        period,
+        args.exchange
+      ))
+  except Exception as err:
+    logging.error("Complete Failure: {}".format(err))
+    print("Complete Failure: {}".format(err))
 
 if __name__ == '__main__':
   main()

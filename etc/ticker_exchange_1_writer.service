@@ -6,6 +6,9 @@ After=network.target
 Type=simple
 WorkingDirectory=/home/armandli/cbp-recorder
 ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && ticker_writer --period 360 --exchange ticker_exchange_1 --logfile writer.log'
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=file:/home/armandli/cbp-recorder/writer_io.log
+StandardError=inherit
 Restart=on-failure
 
 [Install]

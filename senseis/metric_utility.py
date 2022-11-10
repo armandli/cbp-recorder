@@ -35,9 +35,37 @@ def create_row_count_gauge(app_name):
 def get_row_count_gauge():
   return ROW_COUNT_GAUGE
 
+def create_output_data_process_time_gauge(app_name):
+  global OUTPUT_DATA_PROCESS_TIME_GAUGE
+  OUTPUT_DATA_PROCESS_TIME_GAUGE = Gauge(app_name + "_output_data_processing_time", "the time it took to produce output data", registry=get_collector_registry())
+
+def get_output_data_process_time_gauge():
+  return OUTPUT_DATA_PROCESS_TIME_GAUGE
+
 def create_error_gauge(app_name):
   global ERROR_GAUGE
   ERROR_GAUGE = Gauge(app_name + '_error_count', "number of errors", registry=get_collector_registry())
 
 def get_error_gauge():
   return ERROR_GAUGE
+
+def create_missed_book_gauge(app_name):
+  global MISSED_BOOK_GAUGE
+  MISSED_BOOK_GAUGE = Gauge(app_name + "_missed_book", "number of book reports missed due to http error", registry=get_collector_registry())
+
+def get_missed_book_gauge():
+  return MISSED_BOOK_GAUGE
+
+def create_trade_count_gauge(app_name):
+  global TRADE_COUNT_GAUGE
+  TRADE_COUNT_GAUGE = Gauge(app_name + "_trade_count", "number of trades obtained during this period", registry=get_collector_registry())
+
+def get_trade_count(app_name):
+  return TRADE_COUNT_GAUGE
+
+def create_etl_process_time_gauge(app_name):
+  global ETL_DATA_PROCESS_TIME_GAUGE
+  ETL_DATA_PROCESS_TIME_GAUGE = Gauge(app_name + "_etl_data_processing_time", "the time it took to process data for one period", registry=get_collector_registry())
+
+def get_etl_process_time_gauge():
+  return ETL_DATA_PROCESS_TIME_GAUGE

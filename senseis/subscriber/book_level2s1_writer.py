@@ -91,7 +91,7 @@ def set_last_bids_asks(pid, cur_bids, cur_asks):
 
 def data_to_df(data, exchange_name):
   pids = get_exchange_pids(exchange_name)
-  columns = [pid + ':' + ty for pid in pids for ty in ['bids', 'asks', 'sequence']]
+  columns = [pid + ':' + ty for pid in pids for ty in ['bids', 'asks', 'sequence', 'nlevels']]
   columns.append(STIME_COLNAME)
   columns.append(RTIME_COLNAME)
   data.sort(key=lambda x: datetime.strptime(x[STIME_COLNAME], DATETIME_FORMAT))
@@ -103,16 +103,21 @@ def data_to_df(data, exchange_name):
         d[pid + ':' + 'bids'].append(np.array([], dtype=np.float32))
         d[pid + ':' + 'asks'].append(np.array([], dtype=np.float32))
         d[pid + ':' + 'sequence'].append(math.nan)
+        d[pid + ':' + 'nlevels'].append(np.array([], dtype=np.float32))
       else:
-        cur_bids = pid_data['bids']
-        cur_asks = pid_data['asks']
+        # first element of the array is the number of levels of the original level2
+        blevel_size = pid_data['bids'][0]
+        alevel_size = pid_data['asks'][0]
+        cur_bids = pid_data['bids'][1:]
+        cur_asks = pid_data['asks'][1:]
         bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
         set_last_bids_asks(pid, cur_bids, cur_asks)
-        taking_bids = [b[:2] for b in pid_data['bids'][:bid_level]]
-        taking_asks = [a[:2] for a in pid_data['asks'][:ask_level]]
+        taking_bids = [b[:2] for b in cur_bids[:min(bid_level, len(cur_bids))]]
+        taking_asks = [a[:2] for a in cur_asks[:min(ask_level, len(cur_asks))]]
         d[pid + ':' + 'bids'].append(np.array(taking_bids, dtype=np.float32).flatten())
         d[pid + ':' + 'asks'].append(np.array(taking_asks, dtype=np.float32).flatten())
         d[pid + ':' + 'sequence'].append(int(pid_data['sequence']))
+        d[pid + ':' + 'nlevels'].append(np.array([blevel_size, alevel_size], dtype=np.float32))
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)
@@ -134,17 +139,21 @@ def main():
   create_write_success_gauge(app_name)
   create_row_count_gauge(app_name)
   create_error_gauge(app_name)
-  asyncio.run(
-    consume_extraction(
-        extraction_subscriber,
-        extraction_writer,
-        data_to_df,
-        args.exchange,
-        s3bucket,
-        s3outdir,
-        args.period * 60,
+  try:
+    asyncio.run(
+      consume_extraction(
+          extraction_subscriber,
+          extraction_writer,
+          data_to_df,
+          args.exchange,
+          s3bucket,
+          s3outdir,
+          args.period * 60,
+      )
     )
-  )
+  except Exception as err:
+    logging.error("Complete Failure: {}".format(err))
+    print("Complete Failure: {}".format(err))
 
 if __name__ == '__main__':
   main()

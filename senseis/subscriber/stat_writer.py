@@ -56,17 +56,21 @@ def main():
   create_write_success_gauge('cbp_{}_writer'.format(args.exchange))
   create_row_count_gauge('cbp_{}_writer'.format(args.exchange))
   create_error_gauge('cbp_{}_writer'.format(args.exchange))
-  asyncio.run(
-    consume_extraction(
-        extraction_subscriber,
-        extraction_writer,
-        data_to_df,
-        args.exchange,
-        s3bucket,
-        s3outdir,
-        args.period * 60,
+  try:
+    asyncio.run(
+      consume_extraction(
+          extraction_subscriber,
+          extraction_writer,
+          data_to_df,
+          args.exchange,
+          s3bucket,
+          s3outdir,
+          args.period * 60,
+      )
     )
-  )
+  except Exception as err:
+    logging.error("Complete Failure: {}".format(err))
+    print("Complete Failure: {}".format(err))
 
 if __name__ == '__main__':
   main()

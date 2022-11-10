@@ -27,11 +27,13 @@ def filter_bidask(data):
   dd = json.loads(data)
   if 'bids' in dd:
     bids = dd['bids']
-    fbids = bids[:min(LEVEL_CAP, len(bids))]
+    fbids = [len(bids) // 3]
+    fbids.extend(bids[:min(LEVEL_CAP, len(bids))])
     dd['bids'] = fbids
   if 'asks' in dd:
     asks = dd['asks']
-    fasks = asks[:min(LEVEL_CAP, len(asks))]
+    fasks = [len(asks) // 3]
+    fasks.extend(asks[:min(LEVEL_CAP, len(asks))])
     dd['asks'] = fasks
   dds = json.dumps(dd)
   return dds
@@ -105,17 +107,21 @@ def main():
   setup_gateway(app_name)
   create_live_gauge(app_name)
   create_error_gauge(app_name)
-  asyncio.run(
-    extraction_producer_consumer(
-      book_extraction,
-      extraction_consumer,
-      create_message,
-      pids,
-      BOOK_REQUEST_URL,
-      period,
-      args.exchange,
-      level=level
-    ))
+  try:
+    asyncio.run(
+      extraction_producer_consumer(
+        book_extraction,
+        extraction_consumer,
+        create_message,
+        pids,
+        BOOK_REQUEST_URL,
+        period,
+        args.exchange,
+        level=level
+      ))
+  except Exception as err:
+    logging.error("Complete Failure: {}".format(err))
+    print("Complete Failure: {}".format(err))
 
 if __name__ == '__main__':
   main()
