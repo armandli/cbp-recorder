@@ -8,6 +8,11 @@ fi
 
 APP_NAME=$1
 
+if [[ ! -f "etc/${APP_NAME}/service" ]]; then
+  echo "File etc/${APP_NAME}.service does not exist"
+  exit 1
+fi
+
 mkdir -p $HOME/.config/systemd/user
 
 cp etc/${APP_NAME}.service $HOME/.config/systemd/user/
