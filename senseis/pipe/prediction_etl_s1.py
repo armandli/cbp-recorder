@@ -19,8 +19,7 @@ from senseis.configuration import is_etl_exchange_name, is_book_exchange_name, i
 from senseis.extraction_producer_consumer import get_period
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
-from senseis.metric_utility import get_live_gauge
-from senseis.metric_utility import get_error_gauge
+from senseis.metric_utility import get_live_gauge, get_error_gauge
 from senseis.metric_utility import create_etl_process_time_gauge, get_etl_process_time_gauge
 
 HIST_SIZE = 960
