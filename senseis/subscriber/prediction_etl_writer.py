@@ -10,7 +10,7 @@ from senseis.configuration import STIME_COLNAME
 from senseis.configuration import is_etl_exchange_name, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
-from senseis.metric_utility import setup_gateway, create_live_gauge, create_write_success_gauge, create_row_count_gauge, create_error_gauge
+from senseis.metric_utility import setup_gateway, setup_subscriber_gauges
 
 def data_to_df(data, exchange_name):
   data.sort(key=lambda x: datetime.strptime(x[STIME_COLNAME], DATETIME_FORMAT))
@@ -33,12 +33,9 @@ def main():
     return
   s3bucket = get_s3_bucket(args.exchange)
   s3outdir = get_s3_outpath(args.exchange)
-  name = 'cbp_{}_writer'.format(args.exchange)
-  setup_gateway(name)
-  create_live_gauge(name)
-  create_write_success_gauge(name)
-  create_row_count_gauge(name)
-  create_error_gauge(name)
+  app_name = 'cbp_{}_writer'.format(args.exchange)
+  setup_gateway(app_name)
+  setup_subscriber_gauges(app_name)
   try:
     asyncio.run(
       consume_extraction(

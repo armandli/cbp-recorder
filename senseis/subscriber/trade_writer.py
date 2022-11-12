@@ -7,12 +7,17 @@ import pandas as pd
 import numpy as np
 import asyncio
 
+from prometheus_client import push_to_gateway
+
 from senseis.configuration import DATETIME_FORMAT, TICKER_TIME_FORMAT1, TICKER_TIME_FORMAT2
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import is_trade_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
-from senseis.metric_utility import setup_gateway, create_live_gauge, create_write_success_gauge, create_row_count_gauge, create_error_gauge
+from senseis.metric_utility import GATEWAY_URL
+from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name
+from senseis.metric_utility import create_live_gauge, setup_subscriber_gauges
+from senseis.metric_utility import get_error_gauge
 
 def convert_trade_time(time_str):
   try:
@@ -39,6 +44,8 @@ def data_to_df(data, exchange_name):
               trade_side = trade['side']
             except ValueError:
               logging.error("Unable to convert trade data {}. data skipped".format(trade))
+              get_error_gauge().inc()
+              push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
               continue
             d["pid"].append(pid)
             d[STIME_COLNAME].append(row[STIME_COLNAME])
@@ -52,6 +59,8 @@ def data_to_df(data, exchange_name):
     return df
   except Exception as e:
     logging.error("Unknown exception {}. creating empty data frame.".format(e))
+    get_error_gauge().inc()
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     pids = get_exchange_pids(exchange_name)
     columns = ["pid", STIME_COLNAME, RTIME_COLNAME, "time", "trade_id", "price", "size", "side"]
     d = {colname : [] for colname in columns}
@@ -67,11 +76,9 @@ def main():
     return
   s3bucket = get_s3_bucket(args.exchange)
   s3outdir = get_s3_outpath(args.exchange)
-  setup_gateway('cbp_{}_writer'.format(args.exchange))
-  create_live_gauge('cbp_{}_writer'.format(args.exchange))
-  create_write_success_gauge('cbp_{}_writer'.format(args.exchange))
-  create_row_count_gauge('cbp_{}_writer'.format(args.exchange))
-  create_error_gauge('cbp_{}_writer'.format(args.exchange))
+  app_name = 'cbp_{}_writer'.format(args.exchange)
+  setup_gateway(app_name)
+  setup_subscriber_gauges(app_name)
   try:
     asyncio.run(
       consume_extraction(

@@ -7,12 +7,17 @@ import asyncio
 import aiohttp
 from sortedcontainers import SortedSet
 
+from prometheus_client import push_to_gateway
+
 from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES, TRADE_SIZE_LIMIT, MAX_TRADE_ID_SET_SIZE
 from senseis.configuration import TRADE_REQUEST_URL
 from senseis.configuration import is_trade_exchange_name, get_exchange_pids
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
-from senseis.metric_utility import setup_gateway, create_live_gauge, create_error_gauge, get_error_gauge
+from senseis.metric_utility import GATEWAY_URL
+from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
+from senseis.metric_utility import get_error_gauge
+from senseis.metric_utility import create_trade_count_gauge, get_trade_count_gauge
 
 #TODO: we can push this into utility
 def get_period(args):
@@ -22,6 +27,9 @@ def get_period(args):
 
 def filter_trade_data(data, last_trade_ids):
   if not last_trade_ids:
+    data_dict = json.loads(data)
+    get_trade_count_gauge().set(len(data_dict))
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     return data
   try:
     data_dict = json.loads(data)
@@ -33,6 +41,8 @@ def filter_trade_data(data, last_trade_ids):
       except ValueError:
         logging.error("Got empty trade id {}. skip".format(d))
         get_error_gauge().inc()
+    get_trade_count_gauge().set(len(filtered_data_dict))
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     out_data = json.dumps(filtered_data_dict)
     return out_data
   except json.decoder.JSONDecodeError:
@@ -129,9 +139,10 @@ def main():
     return
   pids = get_exchange_pids(args.exchange)
   period = get_period(args)
-  setup_gateway('cbp_{}_publisher'.format(args.exchange))
-  create_live_gauge('cbp_{}_publisher'.format(args.exchange))
-  create_error_gauge('cbp_{}_publisher'.format(args.exchange))
+  app_name = 'cbp_{}_publisher'.format(args.exchange)
+  setup_gateway(app_name)
+  setup_basic_gauges(app_name)
+  create_trade_count_gauge('cbp_{}_publisher'.format(args.exchange))
   try:
     asyncio.run(
       extraction_producer_consumer(

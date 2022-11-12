@@ -60,7 +60,7 @@ def create_trade_count_gauge(app_name):
   global TRADE_COUNT_GAUGE
   TRADE_COUNT_GAUGE = Gauge(app_name + "_trade_count", "number of trades obtained during this period", registry=get_collector_registry())
 
-def get_trade_count(app_name):
+def get_trade_count_gauge(app_name):
   return TRADE_COUNT_GAUGE
 
 def create_etl_process_time_gauge(app_name):
@@ -69,3 +69,14 @@ def create_etl_process_time_gauge(app_name):
 
 def get_etl_process_time_gauge():
   return ETL_DATA_PROCESS_TIME_GAUGE
+
+def setup_basic_gauges(app_name):
+  create_live_gauge(app_name)
+  create_error_gauge(app_name)
+
+def setup_subscriber_gauges(app_name):
+  create_live_gauge(app_name)
+  create_write_success_gauge(app_name)
+  create_row_count_gauge(app_name)
+  create_error_gauge(app_name)
+  create_output_data_process_time_gauge(app_name)

@@ -6,7 +6,7 @@ from senseis.configuration import STAT_REQUEST_URL
 from senseis.configuration import get_exchange_pids, is_stat_exchange_name
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, product_extraction_producer, extraction_consumer, create_message
-from senseis.metric_utility import setup_gateway, create_live_gauge, create_error_gauge
+from senseis.metric_utility import setup_gateway, setup_basic_gauges
 
 def main():
   parser = build_publisher_parser()
@@ -16,9 +16,9 @@ def main():
     logging.error("Invalid exchange name. exit")
     return
   pids = get_exchange_pids(args.exchange)
-  setup_gateway('cbp_{}_publisher'.format(args.exchange))
-  create_live_gauge('cbp_{}_publisher'.format(args.exchange))
-  create_error_gauge('cbp_{}_publisher'.format(args.exchange))
+  app_name = 'cbp_{}_publisher'.format(args.exchange)
+  setup_gateway(app_name)
+  setup_basic_gauges(app_name)
   try:
     asyncio.run(
       extraction_producer_consumer(

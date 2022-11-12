@@ -1,6 +1,7 @@
 import argparse
 import logging
 import json
+import time
 from datetime import datetime
 import pytz
 from functools import partial
@@ -16,10 +17,11 @@ from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASS
 from senseis.configuration import get_exchange_pids
 from senseis.configuration import is_etl_exchange_name, is_book_exchange_name, is_trade_exchange_name
 from senseis.extraction_producer_consumer import get_period
-from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, create_live_gauge, create_error_gauge, get_live_gauge, get_error_gauge
-
-#TODO: setup metrics
-#TODO: add logging
+from senseis.metric_utility import GATEWAY_URL
+from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
+from senseis.metric_utility import get_live_gauge
+from senseis.metric_utility import get_error_gauge
+from senseis.metric_utility import create_etl_process_time_gauge, get_etl_process_time_gauge
 
 HIST_SIZE = 960
 
@@ -56,8 +58,7 @@ def compute_bidask_spread(bid_price, ask_price):
   return (ask_price - bid_price) / ask_price
 
 def compute_volatility(returns):
-  #TODO: double check formula
-  return math.sqrt(sum([r**2 for r in returns]) / (len(returns) - 1))
+  return math.sqrt(sum([r**2 for r in returns]))
 
 def convert_trade_time(time_str):
   try:
@@ -85,6 +86,7 @@ class ETLS1State:
     self.tsize = dict()
     self.tvolume = dict()
     self.tavgprice = dict()
+    self.treturn = dict()
     self.nidx = 0
 
   def set_pids(self, pids):
@@ -106,6 +108,7 @@ class ETLS1State:
         self.tsize[pid] =         [float("nan") for _ in range(HIST_SIZE)]
         self.tvolume[pid] =       [float("nan") for _ in range(HIST_SIZE)]
         self.tavgprice[pid] =     [float("nan") for _ in range(HIST_SIZE)]
+        self.treturn[pid] =       [float("nan") for _ in range(HIST_SIZE)]
 
   def insert(self, timestamp, pid_book, pid_trade):
     nidx = self.nidx
@@ -146,11 +149,19 @@ class ETLS1State:
       self.tvolume[pid][nidx] = total_volume
       if total_size == 0:
         self.tavgprice[pid][nidx] = float("nan")
+        self.treturn[pid][nidx] = float("nan")
       else:
         self.tavgprice[pid][nidx] = total_volume / total_size
+        self.treturn[pid][nidx] = float("nan")
+        idx = pidx
+        while idx != nidx:
+          if not math.isnan(self.tavgprice[pid][idx]):
+            self.treturn[pid][nidx] = compute_return(self.tavgprice[pid][idx], self.tavgprice[pid][nidx])
+            break
+          idx = (idx - 1) % HIST_SIZE
     self.nidx = (self.nidx + 1) % HIST_SIZE
 
-  def rolling_avg(self, data, idx, length):
+  def rolling_avg(self, data, idx, length, count_nan=False):
     s = 0.
     nan_count = 0
     for i in range(length):
@@ -160,7 +171,10 @@ class ETLS1State:
         nan_count += 1
     if length - nan_count == 0:
       return float("nan")
-    return s / float(length - nan_count)
+    if count_nan:
+      return s / float(length)
+    else:
+      return s / float(length - nan_count)
 
   def rolling_sum(self, data, idx, length):
     s = 0.
@@ -171,18 +185,75 @@ class ETLS1State:
 
   def rolling_volatility(self, data, idx, length):
     s = 0.
-    nan_count = 0
     for i in range(length):
       if not math.isnan(data[(idx - i) % HIST_SIZE]):
         s += data[(idx - i) % HIST_SIZE] ** 2.
-      else:
-        nan_count += 1
-    if length - nan_count == 0:
-      return float("nan")
-    #TODO: double check formula
-    return math.sqrt(s / float(length - nan_count))
+    return math.sqrt(s)
 
+  def rolling_max(self, data, idx, length):
+    s = float("nan")
+    for i in range(length):
+      s = max(s, data[(idx - i) % HIST_SIZE])
+    return s
+
+  def rolling_min(self, data, idx, length):
+    s = float("nan")
+    for i in range(length):
+      s = min(s, data[(idx - i) % HIST_SIZE])
+    return s
+
+  def produce_output_rolling_k(self, data, pid, idx, k):
+    data[pid + ":best_bid_price_{}avg".format(k)] = self.rolling_avg(self.bbprice[pid], idx, k)
+    data[pid + ":best_bid_price_{}max".foramt(k)] = self.rolling_max(self.bbprice[pid], idx, k)
+    data[pid + ":best_bid_price_{}min".foramt(k)] = self.rolling_min(self.bbprice[pid], idx, k)
+    data[pid + ":best_ask_price_{}avg".format(k)] = self.rolling_avg(self.baprice[pid], idx, k)
+    data[pid + ":best_ask_price_{}max".format(k)] = self.rolling_max(self.baprice[pid], idx, k)
+    data[pid + ":best_ask_price_{}min".format(k)] = self.rolling_min(self.baprice[pid], idx, k)
+    data[pid + ":best_bid_size_{}avg".format(k)]  = self.rolling_avg(self.bbsize[pid], idx, k)
+    data[pid + ":best_bid_size_{}max".format(k)]  = self.rolling_max(self.bbsize[pid], idx, k)
+    data[pid + ":best_bid_size_{}min".format(k)]  = self.rolling_min(self.bbsize[pid], idx, k)
+    data[pid + ":best_ask_size_{}avg".format(k)]  = self.rolling_avg(self.basize[pid], idx, k)
+    data[pid + ":best_ask_size_{}max".format(k)]  = self.rolling_max(self.basize[pid], idx, k)
+    data[pid + ":best_ask_size_{}min".format(k)]  = self.rolling_min(self.basize[pid], idx, k)
+    data[pid + ":ba_inbalance_{}avg".format(k)]   = self.rolling_avg(self.bba_inbalance[pid], idx, k)
+    data[pid + ":ba_inbalance_{}max".format(k)]   = self.rolling_max(self.bba_inbalance[pid], idx, k)
+    data[pid + ":ba_inbalance_{}min".format(k)]   = self.rolling_min(self.bba_inbalance[pid], idx, k)
+    data[pid + ":wap_{}avg".format(k)]            = self.rolling_avg(self.wapprice[pid], idx, k)
+    data[pid + ":wap_{}max".format(k)]            = self.rolling_max(self.wapprice[pid], idx, k)
+    data[pid + ":wap_{}min".format(k)]            = self.rolling_min(self.wapprice[pid], idx, k)
+    data[pid + ":book_return_{}avg".format(k)]    = self.rolling_avg(self.breturn[pid], idx, k)
+    data[pid + ":book_return_{}max".format(k)]    = self.rolling_max(self.breturn[pid], idx, k)
+    data[pid + ":book_return_{}min".format(k)]    = self.rolling_min(self.breturn[pid], idx, k)
+    data[pid + ":book_return_{}sum".format(k)]    = self.rolling_sum(self.breturn[pid], idx, k)
+    data[pid + ":ba_spread_{}avg".format(k)]      = self.rolling_avg(self.bbaspread[pid], idx, k)
+    data[pid + ":ba_spread_{}max".format(k)]      = self.rolling_max(self.bbaspread[pid], idx, k)
+    data[pid + ":ba_spread_{}min".format(k)]      = self.rolling_min(self.bbaspread[pid], idx, k)
+    data[pid + ":trade_buys_count_{}sum".format(k)] = self.rolling_sum(self.tnbuys[pid], idx, k)
+    data[pid + ":trade_buys_count_{}avg".format(k)] = self.rolling_avg(self.tnbuys[pid], idx, k, count_nan=True)
+    data[pid + ":trade_buys_count_{}max".format(k)] = self.rolling_max(self.tnbuys[pid], idx, k)
+    data[pid + ":trade_buys_count_{}min".format(k)] = self.rolling_min(self.tnbuys[pid], idx, k)
+    data[pid + ":trade_sells_count_{}sum".format(k)] = self.rolling_sum(self.tnsells[pid], idx, k)
+    data[pid + ":trade_sells_count_{}avg".format(k)] = self.rolling_avg(self.tnsells[pid], idx, k, count_nan=True)
+    data[pid + ":trade_sells_count_{}max".format(k)] = self.rolling_max(self.tnsells[pid], idx, k)
+    data[pid + ":trade_sells_count_{}min".format(k)] = self.rolling_min(self.tnsells[pid], idx, k)
+    data[pid + ":trade_size_{}sum".format(k)] = self.rolling_sum(self.tsize[pid], idx, k)
+    data[pid + ":trade_size_{}avg".format(k)] = self.rolling_avg(self.tsize[pid], idx, k, count_nan=True)
+    data[pid + ":trade_size_{}max".format(k)] = self.rolling_max(self.tsize[pid], idx, k)
+    data[pid + ":trade_size_{}min".format(k)] = self.rolling_min(self.tsize[pid], idx, k)
+    data[pid + ":trade_volume_{}sum".format(k)] = self.rolling_sum(self.tvolume[pid], idx, k)
+    data[pid + ":trade_volume_{}avg".format(k)] = self.rolling_avg(self.tvolume[pid], idx, k, count_nan=True)
+    data[pid + ":trade_volume_{}max".format(k)] = self.rolling_max(self.tvolume[pid], idx, k)
+    data[pid + ":trade_volume_{}min".format(k)] = self.rolling_min(self.tvolume[pid], idx, k)
+    data[pid + ":trade_avg_price_{}avg".format(k)] = self.rolling_avg(self.tavgprice[pid], idx, k)
+    data[pid + ":trade_avg_price_{}max".format(k)] = self.rolling_max(self.tavgprice[pid], idx, k)
+    data[pid + ":trade_avg_price_{}min".format(k)] = self.rolling_min(self.tavgprice[pid], idx, k)
+    data[pid + ":trade_return_{}sum".format(k)] = self.rolling_sum(self.treturn[pid], idx, k)
+    data[pid + ":trade_return_{}max".format(k)] = self.rolling_max(self.treturn[pid], idx, k)
+    data[pid + ":trade_return_{}min".format(k)] = self.rolling_min(self.treturn[pid], idx, k)
+
+  #TODO: rolling also need to filter on timestamp
   def produce_output(self, timestamp):
+    perf_start_time = time.perf_counter()
     idx = -1
     for i in range(len(self.timestamps)):
       if self.timestamps[i] == timestamp:
@@ -198,7 +269,7 @@ class ETLS1State:
       data[pid + ":best_bid_size"]  = self.bbsize[pid][idx]
       data[pid + ":best_ask_size"]  = self.basize[pid][idx]
       data[pid + ":ba_inbalance"]   = self.bba_inbalance[pid][idx]
-      data[pid + ":weighted_average_price"] = self.wapprice[pid][idx]
+      data[pid + ":wap"]            = self.wapprice[pid][idx]
       data[pid + ":book_return"]    = self.breturn[pid][idx]
       data[pid + ":ba_spread"]      = self.bbaspread[pid][idx]
       data[pid + ":trade_buys_count"] = self.tnbuys[pid][idx]
@@ -206,78 +277,41 @@ class ETLS1State:
       data[pid + ":trade_size"]     = self.tsize[pid][idx]
       data[pid + ":trade_volume"]   = self.tvolume[pid][idx]
       data[pid + ":trade_avg_price"] = self.tavgprice[pid][idx]
+      data[pid + ":trade_return"]   = self.treturn[pid][idx]
+
+      self.produce_output_rolling_k(data, pid, idx, 3)
+      self.produce_output_rolling_k(data, pid, idx, 9)
+      self.produce_output_rolling_k(data, pid, idx, 27)
+      self.produce_output_rolling_k(data, pid, idx, 81)
+      self.produce_output_rolling_k(data, pid, idx, 162)
+      self.produce_output_rolling_k(data, pid, idx, 324)
+      self.produce_output_rolling_k(data, pid, idx, 648)
+      self.produce_output_rolling_k(data, pid, idx, 960)
+
+      data[pid + ":book_volatility_27"] = self.rolling_volatility(self.breturn[pid], idx, 27)
+      data[pid + ":book_volatility_81"] = self.rolling_volatility(self.breturn[pid], idx, 81)
+      data[pid + ":book_volatility_162"] = self.rolling_volatility(self.breturn[pid], idx, 162)
+      data[pid + ":book_volatility_324"] = self.rolling_volatility(self.breturn[pid], idx, 324)
+      data[pid + ":book_volatility_648"] = self.rolling_volatility(self.breturn[pid], idx, 648)
+      data[pid + ":book_volatility_960"] = self.rolling_volatility(self.breturn[pid], idx, 960)
+
+      data[pid + ":book_volatility_27"] = self.rolling_volatility(self.treturn[pid], idx, 27)
+      data[pid + ":book_volatility_81"] = self.rolling_volatility(self.treturn[pid], idx, 81)
+      data[pid + ":book_volatility_162"] = self.rolling_volatility(self.treturn[pid], idx, 162)
+      data[pid + ":book_volatility_324"] = self.rolling_volatility(self.treturn[pid], idx, 324)
+      data[pid + ":book_volatility_648"] = self.rolling_volatility(self.treturn[pid], idx, 648)
+      data[pid + ":book_volatility_960"] = self.rolling_volatility(self.treturn[pid], idx, 960)
+
       #TODO: research other signals to add
       #TODO: add signal on log of bid/ask price over average for given window
       # rolling average 3 seconds
-      data[pid + ":best_bid_price_3avg"] = self.rolling_avg(self.bbprice[pid], idx, 3)
-      data[pid + ":best_ask_price_3avg"] = self.rolling_avg(self.baprice[pid], idx, 3)
-      data[pid + ":best_bid_size_3avg"] = self.rolling_avg(self.bbsize[pid], idx, 3)
-      data[pid + ":best_ask_size_3avg"] = self.rolling_avg(self.basize[pid], idx, 3)
-      data[pid + ":ba_inbalance_3avg"] = self.rolling_avg(self.bba_inbalance[pid], idx, 3)
-      data[pid + ":wap_3avg"] = self.rolling_avg(self.wapprice[pid], idx, 3)
-      data[pid + ":book_return_3avg"] = self.rolling_avg(self.breturn[pid], idx, 3)
-      data[pid + ":book_return_3sum"] = self.rolling_sum(self.breturn[pid], idx, 3)
-      data[pid + ":ba_spread_3avg"] = self.rolling_avg(self.bbaspread[pid], idx, 3)
-      data[pid + ":trade_buys_count_3sum"] = self.rolling_sum(self.tnbuys[pid], idx, 3)
-      data[pid + ":trade_sells_count_3sum"] = self.rolling_sum(self.tnsells[pid], idx, 3)
-      data[pid + ":trade_size_3avg"] = self.rolling_avg(self.tsize[pid], idx, 3)
-      data[pid + ":trade_avg_price_3avg"] = self.rolling_avg(self.tavgprice[pid], idx, 3)
-      # rolling average 9 seconds
-      data[pid + ":best_bid_price_9avg"] = self.rolling_avg(self.bbprice[pid], idx, 9)
-      data[pid + ":best_ask_price_9avg"] = self.rolling_avg(self.baprice[pid], idx, 9)
-      data[pid + ":best_bid_size_9avg"] = self.rolling_avg(self.bbsize[pid], idx, 9)
-      data[pid + ":best_ask_size_9avg"] = self.rolling_avg(self.basize[pid], idx, 9)
-      data[pid + ":ba_inbalance_9avg"] = self.rolling_avg(self.bba_inbalance[pid], idx, 9)
-      data[pid + ":wap_9avg"] = self.rolling_avg(self.wapprice[pid], idx, 9)
-      data[pid + ":book_return_9avg"] = self.rolling_avg(self.breturn[pid], idx, 9)
-      data[pid + ":book_return_9sum"] = self.rolling_sum(self.breturn[pid], idx, 9)
-      data[pid + ":ba_spread_9avg"] = self.rolling_avg(self.bbaspread[pid], idx, 9)
-      data[pid + ":trade_buys_count_9sum"] = self.rolling_sum(self.tnbuys[pid], idx, 9)
-      data[pid + ":trade_sells_count_9sum"] = self.rolling_sum(self.tnsells[pid], idx, 9)
-      data[pid + ":trade_size_9avg"] = self.rolling_avg(self.tsize[pid], idx, 9)
-      data[pid + ":trade_avg_price_9avg"] = self.rolling_avg(self.tavgprice[pid], idx, 9)
-      # rolling average 27 seconds
-      data[pid + ":best_bid_price_27avg"] = self.rolling_avg(self.bbprice[pid], idx, 27)
-      data[pid + ":best_ask_price_27avg"] = self.rolling_avg(self.baprice[pid], idx, 27)
-      data[pid + ":best_bid_size_27avg"] = self.rolling_avg(self.bbsize[pid], idx, 27)
-      data[pid + ":best_ask_size_27avg"] = self.rolling_avg(self.basize[pid], idx, 27)
-      data[pid + ":ba_inbalance_27avg"] = self.rolling_avg(self.bba_inbalance[pid], idx, 27)
-      data[pid + ":wap_27avg"] = self.rolling_avg(self.wapprice[pid], idx, 27)
-      data[pid + ":book_return_27avg"] = self.rolling_avg(self.breturn[pid], idx, 27)
-      data[pid + ":book_return_27sum"] = self.rolling_sum(self.breturn[pid], idx, 27)
-      data[pid + ":ba_spread_27avg"] = self.rolling_avg(self.bbaspread[pid], idx, 27)
-      data[pid + ":volatility_27s"] = self.rolling_volatility(self.breturn[pid], idx, 27)
-      data[pid + ":trade_buys_count_27sum"] = self.rolling_sum(self.tnbuys[pid], idx, 27)
-      data[pid + ":trade_sells_count_27sum"] = self.rolling_sum(self.tnsells[pid], idx, 27)
-      data[pid + ":trade_size_27avg"] = self.rolling_avg(self.tsize[pid], idx, 27)
-      data[pid + ":trade_avg_price_27avg"] = self.rolling_avg(self.tavgprice[pid], idx, 27)
-      # rolling average 60 seconds
-      data[pid + ":best_bid_price_60avg"] = self.rolling_avg(self.bbprice[pid], idx, 60)
-      data[pid + ":best_ask_price_60avg"] = self.rolling_avg(self.baprice[pid], idx, 60)
-      data[pid + ":best_bid_size_60avg"] = self.rolling_avg(self.bbsize[pid], idx, 60)
-      data[pid + ":best_ask_size_60avg"] = self.rolling_avg(self.basize[pid], idx, 60)
-      data[pid + ":ba_inbalance_60avg"] = self.rolling_avg(self.bba_inbalance[pid], idx, 60)
-      data[pid + ":wap_60avg"] = self.rolling_avg(self.wapprice[pid], idx, 60)
-      data[pid + ":book_return_60avg"] = self.rolling_avg(self.breturn[pid], idx, 60)
-      data[pid + ":book_return_60sum"] = self.rolling_sum(self.breturn[pid], idx, 60)
-      data[pid + ":volatility_60s"] = self.rolling_volatility(self.breturn[pid], idx, 60)
-      data[pid + ":ba_spread_60avg"] = self.rolling_avg(self.bbaspread[pid], idx, 60)
-      data[pid + ":trade_buys_count_60sum"] = self.rolling_sum(self.tnbuys[pid], idx, 60)
-      data[pid + ":trade_sells_count_60sum"] = self.rolling_sum(self.tnsells[pid], idx, 60)
-      data[pid + ":trade_size_60avg"] = self.rolling_avg(self.tsize[pid], idx, 60)
-      data[pid + ":trade_avg_price_60avg"] = self.rolling_avg(self.tavgprice[pid], idx, 60)
-      # rolling average 120 seconds
-      #TODO
-      # rolling average 240 seconds
-      #TODO
-      # rolling average 480 seconds
-      #TODO
-      # rolling average 960 seconds
-      #TODO
     data[STIME_COLNAME] = self.utc.localize(datetime.utcfromtimestamp(timestamp)).strftime(DATETIME_FORMAT)
+    perf_time_taken = time.perf_counter() - perf_start_time
+    get_etl_process_time_gauge().set(perf_time_taken)
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     return data
 
-def etl_s1(period, data, state):
+def process_etl_data(period, data, state):
   book_data = dict()
   trade_data = dict()
   for exchange, msg in data.items():
@@ -333,6 +367,8 @@ async def etl_processor(etl_f, output_exchange_name, input_exchange_names, perio
           msg = aio_pika.Message(body=output)
           logging.info("Sending {}".format(period_str))
           await exchange_publish(message=msg, routing_key='')
+          get_live_gauge().set_to_current_time()
+          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           records.pop(period, None)
       que.task_done()
 
@@ -360,13 +396,15 @@ async def etl_consumer_producer(output_exchange_name, input_exchange_names, peri
       que = asyncio.Queue()
       for input_exchange in input_exchange_names:
           tasks.append(asyncio.create_task(data_subscriber(input_exchange, que)))
-      tasks.append(asyncio.create_task(etl_processor(etl_s1, output_exchange_name, input_exchange_names, periodicity, que)))
+      tasks.append(asyncio.create_task(etl_processor(process_etl_data, output_exchange_name, input_exchange_names, periodicity, que)))
       await asyncio.gather(*tasks, return_exceptions=False)
       await que.join()
     except asyncio.CancelledError as err:
       logging.info("Cancelled Error: {}".format(err))
       for task in tasks:
         task.cancel()
+      get_error_gauge().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
 
@@ -377,10 +415,10 @@ def main():
   if not is_etl_exchange_name(args.exchange):
     logging.error("Invalid exchange name. exit.")
     return
-  name = 'cbp_etl_s1_pipe'
-  setup_gateway(name)
-  create_live_gauge(name)
-  create_error_gauge(name)
+  app_name = 'cbp_etl_s1_pipe'
+  setup_gateway(app_name)
+  setup_basic_gauges(app_name)
+  create_etl_process_time_gauge(app_name)
   try:
     asyncio.run(
       etl_consumer_producer(

@@ -7,12 +7,16 @@ import pandas as pd
 import numpy as np
 import asyncio
 
+from prometheus_client import push_to_gateway
+
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
-from senseis.metric_utility import setup_gateway, create_live_gauge, create_write_success_gauge, create_row_count_gauge, create_error_gauge, get_error_gauge
+from senseis.metric_utility import GATEWAY_URL
+from senseis.metric_utility import setup_gateway, get_job_name, get_collector_registry, setup_subscriber_gauges
+from senseis.metric_utility import get_error_gauge
 
 # special writer that compress the amount of data in book level2
 # determine how many levels of bids and asks we take per second based on market trading volume
@@ -133,12 +137,9 @@ def main():
   s3bucket = get_s3_bucket(args.exchange)
   s3outdir = get_s3_outpath(args.exchange) + '-s1'
   create_ba_state(args.exchange)
-  app_name = 'cbp_{}_s_writer'.format(args.exchange)
+  app_name = 'cbp_{}_s1_writer'.format(args.exchange)
   setup_gateway(app_name)
-  create_live_gauge(app_name)
-  create_write_success_gauge(app_name)
-  create_row_count_gauge(app_name)
-  create_error_gauge(app_name)
+  setup_subscriber_gauges(app_name)
   try:
     asyncio.run(
       consume_extraction(
