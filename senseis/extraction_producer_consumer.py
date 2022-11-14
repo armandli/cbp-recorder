@@ -222,23 +222,32 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     perf_output_time = time.perf_counter() - perf_output_time_start
     get_output_data_process_time_gauge().set(perf_output_time)
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    logging.info("Clearing Data")
     data.clear()
     data.append(dat)
     que.task_done()
+    logging.info("Creating dataframe")
     parquet_buffer = BytesIO()
     df.to_parquet(parquet_buffer, index=False)
+    get_row_count_gauge().set(df.shape[0])
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     session = abcsession.get_session()
     while True:
       try:
         async with session.create_client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET) as client:
+          logging.info("Pushing to S3")
           resp = await client.put_object(Bucket=s3bucket, Key=filename, Body=parquet_buffer.getvalue())
           get_write_success_gauge().set_to_current_time()
-          get_row_count_gauge().set(len(df))
           push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           logging.info(resp)
           break
       except botocore.exceptions.ClientError as err:
         logging.info("botocore ClientError: {}".format(err))
+        get_error_gauge().inc()
+        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+        await asyncio.sleep(S3_RETRY_TIME_SECOND)
+      except Exception as err:
+        logging.erro("Unexpected write error: {}".fomat(err))
         get_error_gauge().inc()
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await asyncio.sleep(S3_RETRY_TIME_SECOND)

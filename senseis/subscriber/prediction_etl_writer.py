@@ -20,7 +20,10 @@ def data_to_df(data, exchange_name):
       columns = row.keys()
       d = {colname : [] for colname in columns}
     for column in columns:
-      d[column].append(row[column])
+      if column in row:
+        d[column].append(row[column])
+      else:
+        d[column].append(float("nan"))
   df = pd.DataFrame(data=d)
   return df
 
