@@ -30,7 +30,7 @@ CANDLE_EXCHANGE_NAMES = ['candle_exchange_0','candle_exchange_1']
 TICKER_EXCHANGE_NAMES = ['ticker_exchange_0', 'ticker_exchange_1']
 STAT_EXCHANGE_NAMES = ['stat_exchange_0', 'stat_exchange_1']
 TRADE_EXCHANGE_NAMES = ['trade_exchange_0', 'trade_exchange_1']
-ETL_EXCHANGE_NAMES = ['etl_exchange_s1']
+ETL_EXCHANGE_NAMES = ['etl_exchange_s1', 'etl_exchange_s2']
 
 EXCHANGE_PIDS = [
     ['BTC-USD','ETH-USD','MKR-USD','BCH-USD','COMP-USD','AAVE-USD','UNI-USD','CRV-USD','BAL-USD','LTC-USD'],
@@ -46,6 +46,7 @@ OUTPATHS = {
     "stat" : "stat",
     "trade" : "trade",
     "etl_exchange_s1" : "etl-s1",
+    "etl_exchange_s2" : "etl-s2",
 }
 
 STIME_COLNAME = 'sequence_time'
