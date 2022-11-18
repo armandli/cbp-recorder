@@ -258,7 +258,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await asyncio.sleep(S3_RETRY_TIME_SECOND)
       except Exception as err:
-        logging.erro("Unexpected write error: {}".fomat(err))
+        logging.error("Unexpected write error: {}".fomat(err))
         get_error_gauge().inc()
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await asyncio.sleep(S3_RETRY_TIME_SECOND)
