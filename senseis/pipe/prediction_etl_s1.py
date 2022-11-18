@@ -5,19 +5,19 @@ import time
 from datetime import datetime
 import pytz
 import math
-from functools import partial
 import asyncio
-import aio_pika
 
 from prometheus_client import push_to_gateway
 
 from senseis.utility import setup_logging
-from senseis.configuration import DATETIME_FORMAT, TICKER_TIME_FORMAT1, TICKER_TIME_FORMAT2
+from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME
-from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
-from senseis.configuration import get_exchange_pids
-from senseis.configuration import is_etl_exchange_name, is_book_exchange_name, is_trade_exchange_name
-from senseis.extraction_producer_consumer import get_period
+from senseis.configuration import is_etl_exchange_name
+from senseis.calculation import compute_book_inbalance, compute_weighted_average_price, compute_return, compute_bidask_spread
+from senseis.extraction_producer_consumer import convert_trade_time
+from senseis.pipe_consumer_producer import etl_consumer_producer, data_subscriber, etl_processor, process_etl_data
+from senseis.pipe_consumer_producer import ETLState
+
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
 from senseis.metric_utility import get_live_gauge, get_error_gauge
@@ -36,38 +36,7 @@ def build_parser():
   parser.add_argument("--logfile", type=str, help="log filename", required=True)
   return parser
 
-#TODO: refactor these functions to be shared
-def compute_book_inbalance(cbprice, cbsize, caprice, casize, pbprice, pbsize, paprice, pasize):
-  if math.isnan(pbprice) or math.isnan(pbsize) or math.isnan(paprice) or math.isnan(pasize):
-    return float("nan")
-  ge_bid_price = cbprice >= pbprice
-  le_bid_price = cbprice <= pbprice
-  ge_ask_price = caprice >= paprice
-  le_ask_price = caprice <= paprice
-  inba = ge_bid_price * cbsize - le_bid_price * pbsize + ge_ask_price * pasize - le_ask_price * casize
-  return inba
-
-def compute_weighted_average_price(bprice, bsize, aprice, asize):
-  return (bprice * asize + aprice * bsize) / (bsize + asize)
-
-def compute_return(price1, price2):
-  if math.isnan(price1):
-    return float("nan")
-  return math.log(price2 / price1)
-
-def compute_bidask_spread(bid_price, ask_price):
-  return (ask_price - bid_price) / ask_price
-
-def compute_volatility(returns):
-  return math.sqrt(sum([r**2 for r in returns]))
-
-def convert_trade_time(time_str):
-  try:
-    return datetime.strptime(time_str, TICKER_TIME_FORMAT1)
-  except ValueError:
-    return datetime.strptime(time_str, TICKER_TIME_FORMAT2)
-
-class ETLS1State:
+class ETLS1State(ETLState):
   def __init__(self):
     self.timestamps = [None for _ in range(HIST_SIZE)]
     self.utc = pytz.timezone("UTC")
@@ -90,6 +59,9 @@ class ETLS1State:
     self.tavgprice = dict()
     self.treturn = dict()
     self.nidx = 0
+
+  def hist_size(self):
+    return HIST_SIZE
 
   def set_pids(self, pids):
     self.pids = pids
@@ -118,10 +90,44 @@ class ETLS1State:
     self.timestamps[nidx] = timestamp
     for pid in self.pids:
       book_data = json.loads(pid_book[pid])
-      self.bbprice[pid][nidx] = float(book_data['bids'][0][0])
-      self.bbsize[pid][nidx] = float(book_data['bids'][0][1])
-      self.baprice[pid][nidx] = float(book_data['asks'][0][0])
-      self.basize[pid][nidx] = float(book_data['asks'][0][1])
+      if 'bids' not in book_data:
+        logging.info("{} book data for {} missing bids".format(pid, timestamp))
+        self.bbprice[pid][nidx] = float("nan")
+        self.bbsize[pid][nidx] = float("nan")
+      else:
+        try:
+          self.bbprice[pid][nidx] = float(book_data['bids'][0][0])
+        except ValueError:
+          logging.error("cannot parse bid price: {}".format(book_data['bids'][0][0]))
+          get_error_gauge().inc()
+          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+          self.bbprice[pid][nidx] = float("nan")
+        try:
+          self.bbsize[pid][nidx] = float(book_data['bids'][0][1])
+        except ValueError:
+          logging.error("cannot parse bid size: {}".format(book_data['bids'][0][1]))
+          get_error_gauge().inc()
+          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+          self.bbsize[pid][nidx] = float("nan")
+      if 'asks' not in book_data:
+        logging.info("{} book data for {} missing asks".format(pid, timestamp))
+        self.baprice[pid][nidx] = float("nan")
+        self.basize[pid][nidx] = float("nan")
+      else:
+        try:
+          self.baprice[pid][nidx] = float(book_data['asks'][0][0])
+        except ValueError:
+          logging.error("cannot parse ask price: {}".format(book_data['asks'][0][0]))
+          get_error_gauge().inc()
+          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+          self.baprice[pid][nidx] = float("nan")
+        try:
+          self.basize[pid][nidx] = float(book_data['asks'][0][1])
+        except ValueError:
+          logging.error("cannot parse ask size: {}".format(book_data['asks'][0][1]))
+          get_error_gauge().inc()
+          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+          self.basize[pid][nidx] = float("nan")
       self.bba_inbalance[pid][nidx] = compute_book_inbalance(
         self.bbprice[pid][nidx], self.bbsize[pid][nidx], self.baprice[pid][nidx], self.basize[pid][nidx],
         self.bbprice[pid][pidx], self.bbsize[pid][pidx], self.baprice[pid][pidx], self.basize[pid][pidx]
@@ -137,11 +143,22 @@ class ETLS1State:
       count_buys = 0
       count_sells = 0
       trade_data = json.loads(pid_trade[pid])
+      #TODO: if empty, is it going to be a [] ? or a ""
       for t in trade_data:
         trade_epoch = convert_trade_time(t['time']).timestamp()
         if trade_epoch >= timestamp - 1:
-          total_size += float(t['size'])
-          total_volume += float(t['price']) * float(t['size'])
+          try:
+            total_size += float(t['size'])
+          except ValueError:
+            logging.error("cannot parse trade size: {}".format(t['size']))
+            get_error_gauge().inc()
+            push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+          try:
+            total_volume += float(t['price']) * float(t['size'])
+          except ValueError:
+            logging.error("cannot parse trade price or size: {} {}".format(t['price'], t['size']))
+            get_error_gauge().inc()
+            push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           side = t['side']
           if side == 'buy':
             count_buys += 1
@@ -159,65 +176,14 @@ class ETLS1State:
         self.treturn[pid][nidx] = float("nan")
         idx = pidx
         while idx != nidx:
+          if self.timestamps[idx] is None or self.timestamps[idx] > self.timestamps[nidx]:
+            break
           if not math.isnan(self.tavgprice[pid][idx]):
             self.treturn[pid][nidx] = compute_return(self.tavgprice[pid][idx], self.tavgprice[pid][nidx])
             break
           idx = (idx - 1) % HIST_SIZE
     self.bmreturn27[nidx] = self.rolling_mean_return(nidx, timestamp, 27)
     self.nidx = (self.nidx + 1) % HIST_SIZE
-
-  def rolling_avg(self, data, idx, timestamp, length, count_nan=False):
-    s = 0.
-    nan_count = 0
-    count = 0
-    for i in range(length):
-      if self.timestamps[(idx - i) % HIST_SIZE] is None or self.timestamps[(idx - i) % HIST_SIZE] > timestamp:
-        break
-      if not math.isnan(data[(idx - i) % HIST_SIZE]):
-        s += data[(idx - i) % HIST_SIZE]
-      else:
-        nan_count += 1
-      count += 1
-    if count - nan_count == 0:
-      return float("nan")
-    if count_nan:
-      return s / float(count)
-    else:
-      return s / float(count - nan_count)
-
-  def rolling_sum(self, data, idx, timestamp, length):
-    s = 0.
-    for i in range(length):
-      if self.timestamps[(idx - i) % HIST_SIZE] is None or self.timestamps[(idx - i) % HIST_SIZE] > timestamp:
-        break
-      if not math.isnan(data[(idx - i) % HIST_SIZE]):
-        s += data[(idx - i) % HIST_SIZE]
-    return s
-
-  def rolling_volatility(self, data, idx, timestamp, length):
-    s = 0.
-    for i in range(length):
-      if self.timestamps[(idx - i) % HIST_SIZE] is None or self.timestamps[(idx - i) % HIST_SIZE] > timestamp:
-        break
-      if not math.isnan(data[(idx - i) % HIST_SIZE]):
-        s += data[(idx - i) % HIST_SIZE] ** 2.
-    return math.sqrt(s)
-
-  def rolling_max(self, data, idx, timestamp, length):
-    s = float("nan")
-    for i in range(length):
-      if self.timestamps[(idx - i) % HIST_SIZE] is None or self.timestamps[(idx - i) % HIST_SIZE] > timestamp:
-        break
-      s = max(s, data[(idx - i) % HIST_SIZE])
-    return s
-
-  def rolling_min(self, data, idx, timestamp, length):
-    s = float("nan")
-    for i in range(length):
-      if self.timestamps[(idx - i) % HIST_SIZE] is None or self.timestamps[(idx - i) % HIST_SIZE] > timestamp:
-        break
-      s = min(s, data[(idx - i) % HIST_SIZE])
-    return s
 
   def rolling_mean_return(self, idx, timestamp, length):
     rs = [self.rolling_sum(self.breturn[pid], idx, timestamp, length) for pid in self.pids]
@@ -349,102 +315,11 @@ class ETLS1State:
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     return data
 
-def process_etl_data(period, data, state):
-  book_data = dict()
-  trade_data = dict()
-  for exchange, msg in data.items():
-    dat = json.loads(msg)
-    if is_book_exchange_name(exchange):
-      book_data.update(dat)
-    elif is_trade_exchange_name(exchange):
-      trade_data.update(dat)
-    else:
-      logging.info("Unexpected data type from exchange {}, neither book nor trade".format(exchange))
-  state.insert(period, book_data, trade_data)
-  output = state.produce_output(period)
-  message = json.dumps(output)
-  return message.encode()
+def create_state():
+  return ETLS1State()
 
-def is_all_found(exchange_names, data):
-  all_found = True
-  for name in exchange_names:
-      if name not in data:
-        all_found = False
-        break
-  return all_found
-
-async def etl_processor(etl_f, output_exchange_name, input_exchange_names, periodicity, que):
-  utc = pytz.timezone("UTC")
-  etl_state = ETLS1State()
-  records = dict()
-  pids = set()
-  for input_exchange_name in input_exchange_names:
-    pids.update(get_exchange_pids(input_exchange_name))
-  etl_state.set_pids(list(pids))
-  mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
-  async with mq_connection:
-    channel = await mq_connection.channel()
-    exchange = await channel.declare_exchange(name=output_exchange_name, type='fanout')
-    while True:
-      ie_name, msg = await que.get()
-      dat = json.loads(msg)
-      #TODO: this is a bad idea, period other than 1 will not represent time, but it is treated like time in seconds already
-      dat_period = get_period(int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp()), periodicity)
-      if dat_period in records:
-        records[dat_period][ie_name] = msg
-      else:
-        records[dat_period] = {ie_name : msg}
-      for period in sorted(records.keys()):
-        period_str = utc.localize(datetime.utcfromtimestamp(period)).strftime(DATETIME_FORMAT)
-        if period < dat_period - HIST_SIZE:
-          records.pop(period, None)
-        elif not is_all_found(input_exchange_names, records[period]) or period > dat_period:
-          break
-        else:
-          output = etl_f(period, records[period], etl_state)
-          msg = aio_pika.Message(body=output)
-          logging.info("Sending {}".format(period_str))
-          await exchange.publish(message=msg, routing_key='')
-          get_live_gauge().set_to_current_time()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-          records.pop(period, None)
-      que.task_done()
-
-async def push_incoming_to_queue(que, exchange_name, msg: aio_pika.IncomingMessage):
-  async with msg.process():
-    logging.debug("Received from {}".format(exchange_name))
-    await que.put((exchange_name, msg.body))
-
-async def data_subscriber(exchange_name, que):
-  connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
-  handler = partial(push_incoming_to_queue, que, exchange_name)
-  async with connection:
-    channel = await connection.channel()
-    await channel.set_qos(prefetch_count=1) #TODO: needed ?
-    exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
-    queue = await channel.declare_queue('', auto_delete=True)
-    await queue.bind(exchange=exchange)
-    await queue.consume(handler)
-    await asyncio.Future()
-
-async def etl_consumer_producer(output_exchange_name, input_exchange_names, periodicity):
-  tasks = []
-  while True:
-    try:
-      que = asyncio.Queue()
-      for input_exchange in input_exchange_names:
-          tasks.append(asyncio.create_task(data_subscriber(input_exchange, que)))
-      tasks.append(asyncio.create_task(etl_processor(process_etl_data, output_exchange_name, input_exchange_names, periodicity, que)))
-      await asyncio.gather(*tasks, return_exceptions=False)
-      await que.join()
-    except asyncio.CancelledError as err:
-      logging.info("Cancelled Error: {}".format(err))
-      for task in tasks:
-        task.cancel()
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-      await asyncio.gather(*tasks, return_exceptions=True)
-      logging.info("Restarting")
+def get_history_size():
+  return HIST_SIZE
 
 def main():
   parser = build_parser()
@@ -460,6 +335,11 @@ def main():
   try:
     asyncio.run(
       etl_consumer_producer(
+        data_subscriber,
+        etl_processor,
+        process_etl_data,
+        create_state,
+        get_history_size,
         args.exchange,
         [args.b10name, args.b11name, args.t0name, args.t1name],
         args.period,

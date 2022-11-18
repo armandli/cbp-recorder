@@ -13,7 +13,8 @@ import aiobotocore.session as abcsession
 
 from prometheus_client import push_to_gateway
 
-from senseis.configuration import DATETIME_FORMAT, MICROSECONDS, RETRY_TIME, NUM_RETRIES
+from senseis.configuration import DATETIME_FORMAT, TICKER_TIME_FORMAT1, TICKER_TIME_FORMAT2
+from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
 from senseis.configuration import S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
@@ -21,6 +22,20 @@ from senseis.configuration import S3_RETRY_TIME_SECOND
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
 from senseis.metric_utility import get_live_gauge, get_write_success_gauge, get_row_count_gauge, get_error_gauge, get_output_data_process_time_gauge
+
+def convert_trade_time(time_str):
+  try:
+    return datetime.strptime(time_str, TICKER_TIME_FORMAT1)
+  except ValueError:
+    return datetime.strptime(time_str, TICKER_TIME_FORMAT2)
+
+def is_all_found(names, data):
+  all_found = True
+  for name in names:
+    if name not in data:
+      all_found = False
+      break
+  return all_found
 
 async def product_extraction_producer(url, pid, period, session, que):
   # synchronize at the start of next second
@@ -86,7 +101,7 @@ async def product_extraction_producer(url, pid, period, session, que):
     diff = MICROSECONDS * period - (delta.seconds * MICROSECONDS + delta.microseconds)
     await asyncio.sleep(diff / MICROSECONDS)
 
-async def extraction_consumer(pids, exchange_name, create_message, que):
+async def extraction_consumer(pids, exchange_name, create_message_f, que):
   utc = pytz.timezone("UTC")
   records = dict()
   mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
@@ -100,13 +115,9 @@ async def extraction_consumer(pids, exchange_name, create_message, que):
         records[periodic_time][pid] = data
       else:
         records[periodic_time] = {pid : data}
-      all_found = True
-      for known_pid in pids:
-        if known_pid not in records[periodic_time]:
-          all_found = False
-          break
+      all_found = is_all_found(pids, records[periodic_time])
       if all_found:
-        body = create_message(periodic_time, time_record, records[periodic_time])
+        body = create_message_f(periodic_time, time_record, records[periodic_time])
         msg = aio_pika.Message(body=body)
         logging.info("Sending {}".format(periodic_time))
         await exchange.publish(message=msg, routing_key='')
@@ -115,15 +126,15 @@ async def extraction_consumer(pids, exchange_name, create_message, que):
         records.pop(periodic_time, None)
       que.task_done()
 
-async def extraction_producer_consumer(producer, consumer, create_message, pids, url, period, exchange_name, **args):
+async def extraction_producer_consumer(producer_f, consumer_f, create_message_f, pids, url, period, exchange_name, **args):
   while True:
     tasks = []
     try:
       que = asyncio.Queue()
       async with aiohttp.ClientSession() as session:
+        tasks.append(asyncio.create_task(consumer_f(pids=pids, exchange_name=exchange_name, create_message_f=create_message_f, que=que)))
         for pid in pids:
-          tasks.append(asyncio.create_task(producer(url=url, pid=pid, period=period, session=session, que=que, **args)))
-        tasks.append(asyncio.create_task(consumer(pids=pids, exchange_name=exchange_name, create_message=create_message, que=que)))
+          tasks.append(asyncio.create_task(producer_f(url=url, pid=pid, period=period, session=session, que=que, **args)))
         await asyncio.gather(*tasks, return_exceptions=False)
         await que.join()
     except asyncio.CancelledError as err:
@@ -162,8 +173,8 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
   while True:
     try:
       que = asyncio.Queue()
-      tasks.append(asyncio.create_task(subscriber_f(exchange_name, que)))
       tasks.append(asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que)))
+      tasks.append(asyncio.create_task(subscriber_f(exchange_name, que)))
       await asyncio.gather(*tasks, return_exceptions=False)
       await que.join()
     except asyncio.CancelledError as err:
