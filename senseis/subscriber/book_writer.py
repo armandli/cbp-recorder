@@ -39,7 +39,6 @@ def data_to_df(data, exchange_name):
     d[STIME_COLNAME].append(row[STIME_COLNAME])
     d[RTIME_COLNAME].append(row[RTIME_COLNAME])
   df = pd.DataFrame(data=d)
-  perf_time_taken = time.perf_counter() - perf_start_time
   return df
 
 def main():
