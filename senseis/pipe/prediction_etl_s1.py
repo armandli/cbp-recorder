@@ -13,7 +13,7 @@ from senseis.utility import setup_logging
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME
 from senseis.configuration import is_etl_exchange_name
-from senseis.calculation import compute_book_inbalance, compute_weighted_average_price, compute_return, compute_bidask_spread
+from senseis.calculation import compute_book_imbalance, compute_weighted_average_price, compute_return, compute_bidask_spread
 from senseis.extraction_producer_consumer import convert_trade_time
 from senseis.pipe_consumer_producer import etl_consumer_producer, data_subscriber, etl_processor, process_etl_data
 from senseis.pipe_consumer_producer import ETLState
@@ -46,7 +46,7 @@ class ETLS1State(ETLState):
     self.bbsize = dict()
     self.baprice = dict()
     self.basize = dict()
-    self.bba_inbalance = dict()
+    self.bba_imbalance = dict()
     self.waprice = dict()
     self.breturn = dict()
     self.bbaspread = dict()
@@ -68,25 +68,25 @@ class ETLS1State(ETLState):
     for pid in self.pids:
       if pid not in self.bbprice:
         # update book data
-        self.bbprice[pid] =       [float("nan") for _ in range(HIST_SIZE)]
-        self.bbsize[pid] =        [float("nan") for _ in range(HIST_SIZE)]
-        self.baprice[pid] =       [float("nan") for _ in range(HIST_SIZE)]
-        self.basize[pid] =        [float("nan") for _ in range(HIST_SIZE)]
-        self.bba_inbalance[pid] = [float("nan") for _ in range(HIST_SIZE)]
-        self.waprice[pid] =       [float("nan") for _ in range(HIST_SIZE)]
-        self.breturn[pid] =       [float("nan") for _ in range(HIST_SIZE)]
-        self.bbaspread[pid] =     [float("nan") for _ in range(HIST_SIZE)]
+        self.bbprice[pid] =       [float("nan") for _ in range(self.hist_size())]
+        self.bbsize[pid] =        [float("nan") for _ in range(self.hist_size())]
+        self.baprice[pid] =       [float("nan") for _ in range(self.hist_size())]
+        self.basize[pid] =        [float("nan") for _ in range(self.hist_size())]
+        self.bba_imbalance[pid] = [float("nan") for _ in range(self.hist_size())]
+        self.waprice[pid] =       [float("nan") for _ in range(self.hist_size())]
+        self.breturn[pid] =       [float("nan") for _ in range(self.hist_size())]
+        self.bbaspread[pid] =     [float("nan") for _ in range(self.hist_size())]
         # update trade data
-        self.tnbuys[pid] =        [0 for _ in range(HIST_SIZE)]
-        self.tnsells[pid] =       [0 for _ in range(HIST_SIZE)]
-        self.tsize[pid] =         [float("nan") for _ in range(HIST_SIZE)]
-        self.tvolume[pid] =       [float("nan") for _ in range(HIST_SIZE)]
-        self.tavgprice[pid] =     [float("nan") for _ in range(HIST_SIZE)]
-        self.treturn[pid] =       [float("nan") for _ in range(HIST_SIZE)]
+        self.tnbuys[pid] =        [0 for _ in range(self.hist_size())]
+        self.tnsells[pid] =       [0 for _ in range(self.hist_size())]
+        self.tsize[pid] =         [float("nan") for _ in range(self.hist_size())]
+        self.tvolume[pid] =       [float("nan") for _ in range(self.hist_size())]
+        self.tavgprice[pid] =     [float("nan") for _ in range(self.hist_size())]
+        self.treturn[pid] =       [float("nan") for _ in range(self.hist_size())]
 
   def insert(self, timestamp, pid_book, pid_trade):
     nidx = self.nidx
-    pidx = (nidx - 1) % HIST_SIZE
+    pidx = (nidx - 1) % self.hist_size()
     self.timestamps[nidx] = timestamp
     for pid in self.pids:
       book_data = json.loads(pid_book[pid])
@@ -128,7 +128,7 @@ class ETLS1State(ETLState):
           get_error_gauge().inc()
           push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           self.basize[pid][nidx] = float("nan")
-      self.bba_inbalance[pid][nidx] = compute_book_inbalance(
+      self.bba_imbalance[pid][nidx] = compute_book_imbalance(
         self.bbprice[pid][nidx], self.bbsize[pid][nidx], self.baprice[pid][nidx], self.basize[pid][nidx],
         self.bbprice[pid][pidx], self.bbsize[pid][pidx], self.baprice[pid][pidx], self.basize[pid][pidx]
       )
@@ -181,9 +181,9 @@ class ETLS1State(ETLState):
           if not math.isnan(self.tavgprice[pid][idx]):
             self.treturn[pid][nidx] = compute_return(self.tavgprice[pid][idx], self.tavgprice[pid][nidx])
             break
-          idx = (idx - 1) % HIST_SIZE
+          idx = (idx - 1) % self.hist_size()
     self.bmreturn27[nidx] = self.rolling_mean_return(nidx, timestamp, 27)
-    self.nidx = (self.nidx + 1) % HIST_SIZE
+    self.nidx = (self.nidx + 1) % self.hist_size()
 
   def rolling_mean_return(self, idx, timestamp, length):
     rs = [self.rolling_sum(self.breturn[pid], idx, timestamp, length) for pid in self.pids]
@@ -195,12 +195,15 @@ class ETLS1State(ETLState):
     mrsum = 0.
     count = 0
     nan_count = 0
+    min_timestamp = timestamp - length
     for i in range(length):
-      if self.timestamps[(idx - i) % HIST_SIZE] is None or self.timestamps[(idx - i) % HIST_SIZE] > timestamp:
+      if self.timestamps[(idx - i) % self.hist_size()] is None or \
+         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
+         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
         return float("nan")
-      if not math.isnan(self.bmreturn27[(idx - i) % HIST_SIZE]) and not math.isnan(prdata[(idx - i) % HIST_SIZE]):
-        m2sum += self.bmreturn27[(idx - i) % HIST_SIZE] ** 2
-        mrsum += self.bmreturn27[(idx - i) % HIST_SIZE] * prdata[(idx - i) % HIST_SIZE]
+      if not math.isnan(self.bmreturn27[(idx - i) % self.hist_size()]) and not math.isnan(prdata[(idx - i) % self.hist_size()]):
+        m2sum += self.bmreturn27[(idx - i) % self.hist_size()] ** 2
+        mrsum += self.bmreturn27[(idx - i) % self.hist_size()] * prdata[(idx - i) % self.hist_size()]
       else:
         nan_count += 1
       count += 1
@@ -221,9 +224,9 @@ class ETLS1State(ETLState):
     data[pid + ":best_ask_size_{}avg".format(k)]  = self.rolling_avg(self.basize[pid], idx, timestamp, k)
     data[pid + ":best_ask_size_{}max".format(k)]  = self.rolling_max(self.basize[pid], idx, timestamp, k)
     data[pid + ":best_ask_size_{}min".format(k)]  = self.rolling_min(self.basize[pid], idx, timestamp, k)
-    data[pid + ":ba_inbalance_{}avg".format(k)]   = self.rolling_avg(self.bba_inbalance[pid], idx, timestamp, k)
-    data[pid + ":ba_inbalance_{}max".format(k)]   = self.rolling_max(self.bba_inbalance[pid], idx, timestamp, k)
-    data[pid + ":ba_inbalance_{}min".format(k)]   = self.rolling_min(self.bba_inbalance[pid], idx, timestamp, k)
+    data[pid + ":ba_imbalance_{}avg".format(k)]   = self.rolling_avg(self.bba_imbalance[pid], idx, timestamp, k)
+    data[pid + ":ba_imbalance_{}max".format(k)]   = self.rolling_max(self.bba_imbalance[pid], idx, timestamp, k)
+    data[pid + ":ba_imbalance_{}min".format(k)]   = self.rolling_min(self.bba_imbalance[pid], idx, timestamp, k)
     data[pid + ":wap_{}avg".format(k)]            = self.rolling_avg(self.waprice[pid], idx, timestamp, k)
     data[pid + ":wap_{}max".format(k)]            = self.rolling_max(self.waprice[pid], idx, timestamp, k)
     data[pid + ":wap_{}min".format(k)]            = self.rolling_min(self.waprice[pid], idx, timestamp, k)
@@ -234,6 +237,7 @@ class ETLS1State(ETLState):
     data[pid + ":ba_spread_{}avg".format(k)]      = self.rolling_avg(self.bbaspread[pid], idx, timestamp, k)
     data[pid + ":ba_spread_{}max".format(k)]      = self.rolling_max(self.bbaspread[pid], idx, timestamp, k)
     data[pid + ":ba_spread_{}min".format(k)]      = self.rolling_min(self.bbaspread[pid], idx, timestamp, k)
+
     data[pid + ":trade_buys_count_{}sum".format(k)] = self.rolling_sum(self.tnbuys[pid], idx, timestamp, k)
     data[pid + ":trade_buys_count_{}avg".format(k)] = self.rolling_avg(self.tnbuys[pid], idx, timestamp, k, count_nan=True)
     data[pid + ":trade_buys_count_{}max".format(k)] = self.rolling_max(self.tnbuys[pid], idx, timestamp, k)
@@ -273,10 +277,11 @@ class ETLS1State(ETLState):
       data[pid + ":best_ask_price"] = self.baprice[pid][idx]
       data[pid + ":best_bid_size"]  = self.bbsize[pid][idx]
       data[pid + ":best_ask_size"]  = self.basize[pid][idx]
-      data[pid + ":ba_inbalance"]   = self.bba_inbalance[pid][idx]
+      data[pid + ":ba_imbalance"]   = self.bba_imbalance[pid][idx]
       data[pid + ":wap"]            = self.waprice[pid][idx]
       data[pid + ":book_return"]    = self.breturn[pid][idx]
       data[pid + ":ba_spread"]      = self.bbaspread[pid][idx]
+
       data[pid + ":trade_buys_count"] = self.tnbuys[pid][idx]
       data[pid + ":trade_sells_count"] = self.tnsells[pid][idx]
       data[pid + ":trade_size"]     = self.tsize[pid][idx]

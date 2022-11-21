@@ -20,6 +20,7 @@ setup(
       'pandas',
       'pyarrow',
       'numpy',
+      'scikit-learn',
       'boto3',
       's3fs',
       'prometheus-client',
@@ -38,6 +39,7 @@ setup(
         'trade_writer = senseis.subscriber.trade_writer:main',
         'prediction_etl_writer = senseis.subscriber.prediction_etl_writer:main',
         'prediction_etl_s1 = senseis.pipe.prediction_etl_s1:main',
+        'prediction_etl_s2 = senseis.pipe.prediction_etl_s2:main',
         'candle_backfiller = senseis.backfiller.candle_backfiller:main',
         'printer = senseis.subscriber.printer:main',
     ]
