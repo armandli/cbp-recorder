@@ -8,7 +8,7 @@ from prometheus_client import push_to_gateway
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD, is_valid_exchange_name
 from senseis.utility import setup_logging
 from senseis.metric_utility import GATEWAY_URL
-from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, create_live_gauge, get_live_gauge, create_error_gauge
+from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, create_live_gauge, get_live_gauge
 
 def build_parser():
   parser = argparse.ArgumentParser(description='')
@@ -43,7 +43,6 @@ def main():
     return
   setup_gateway('cbp_printer_{}'.format(args.exchange))
   create_live_gauge('cbp_printer_{}'.format(args.exchange))
-  create_error_gauge('cbp_printer_{}'.format(args.exchange))
   asyncio.run(consume_book(args.exchange))
 
 if __name__ == '__main__':

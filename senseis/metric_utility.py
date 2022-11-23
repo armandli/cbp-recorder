@@ -42,13 +42,6 @@ def create_output_data_process_time_gauge(app_name):
 def get_output_data_process_time_gauge():
   return OUTPUT_DATA_PROCESS_TIME_GAUGE
 
-def create_error_gauge(app_name):
-  global ERROR_GAUGE
-  ERROR_GAUGE = Gauge(app_name + '_error_count', "number of errors", registry=get_collector_registry())
-
-def get_error_gauge():
-  return ERROR_GAUGE
-
 def create_missed_book_gauge(app_name):
   global MISSED_BOOK_GAUGE
   MISSED_BOOK_GAUGE = Gauge(app_name + "_missed_book", "number of book reports missed due to http error", registry=get_collector_registry())
@@ -70,13 +63,20 @@ def create_etl_process_time_gauge(app_name):
 def get_etl_process_time_gauge():
   return ETL_DATA_PROCESS_TIME_GAUGE
 
+def create_restarted_gauge(app_name):
+  global ASYNC_RESTARTED_GAUGE
+  ASYNC_RESTARTED_GAUGE = Gauge(app_name + "_restarted_count", "number of times process restarted all asynchronous tasks", registry=get_collector_registry())
+
+def get_restarted_gauge():
+  return ASYNC_RESTARTED_GAUGE
+
 def setup_basic_gauges(app_name):
   create_live_gauge(app_name)
-  create_error_gauge(app_name)
+  create_restarted_gauge(app_name)
 
 def setup_subscriber_gauges(app_name):
   create_live_gauge(app_name)
+  create_restarted_gauge(app_name)
   create_write_success_gauge(app_name)
   create_row_count_gauge(app_name)
-  create_error_gauge(app_name)
   create_output_data_process_time_gauge(app_name)

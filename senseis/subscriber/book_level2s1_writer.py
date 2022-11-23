@@ -16,13 +16,13 @@ from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_job_name, get_collector_registry, setup_subscriber_gauges
-from senseis.metric_utility import get_error_gauge
 
 # special writer that compress the amount of data in book level2
 # determine how many levels of bids and asks we take per second based on market trading volume
 # by default we take 6 levels
 
 DEFAULT_TAKE_LEVEL = 6
+PUBLISHER_CAP = 30
 
 def create_ba_state(exchange_name):
   pids = get_exchange_pids(exchange_name)
@@ -42,20 +42,20 @@ def compute_take_level(pid, cur_bids, cur_asks):
       try:
         missing_volume += float(last_bids[lidx][1])
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert volume into float: {}".format(last_bids[lidx][1]))
       lidx += 1
     if lidx < len(last_bids) and float(last_bids[lidx][0]) == float(cur_bids[0][0]):
       try:
         missing_volume += max(0., float(last_bids[lidx][1]) - float(cur_bids[0][1]))
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert volume into float: {} or {}".format(last_bids[lidx][1], cur_bids[0][1]))
     level_count = 0
     cidx = 0
     while cidx < len(cur_bids) and missing_volume > 0.:
       try:
         missing_volume -= float(cur_bids[cidx][1])
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert volume into float: {}".format(cur_bids[cidx][1]))
       level_count += 1
       cidx += 1
     blevel = max(DEFAULT_TAKE_LEVEL, int(level_count))
@@ -70,20 +70,20 @@ def compute_take_level(pid, cur_bids, cur_asks):
       try:
         missing_volume += float(last_asks[lidx][1])
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert volume into float: {}".format(last_asks[lidx][1]))
       lidx += 1
     if lidx < len(last_asks) and float(last_asks[lidx][0]) == float(cur_asks[0][0]):
       try:
         missing_volume += max(0., float(last_asks[lidx][1]) - float(cur_asks[0][1]))
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert volume into float: {} or {}".format(last_asks[lidx][1], cur_asks[0][1]))
     level_count = 0
     cidx = 0
     while cidx < len(cur_asks) and missing_volume > 0.:
       try:
         missing_volume -= float(cur_asks[cidx][1])
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert volume into float: {}".format(cur_asks[cidx][1]))
       level_count += 1
       cidx += 1
     alevel = max(DEFAULT_TAKE_LEVEL, int(level_count))
@@ -114,8 +114,9 @@ def data_to_df(data, exchange_name):
         alevel_size = pid_data['asks'][0]
         cur_bids = pid_data['bids'][1:]
         cur_asks = pid_data['asks'][1:]
-        bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
-        set_last_bids_asks(pid, cur_bids, cur_asks)
+        bid_level, ask_level = PUBLISHER_CAP, PUBLISHER_CAP
+        #bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
+        #set_last_bids_asks(pid, cur_bids, cur_asks)
         taking_bids = [b[:2] for b in cur_bids[:min(bid_level, len(cur_bids))]]
         taking_asks = [a[:2] for a in cur_asks[:min(ask_level, len(cur_asks))]]
         d[pid + ':' + 'bids'].append(np.array(taking_bids, dtype=np.float32).flatten())
@@ -136,7 +137,7 @@ def main():
     return
   s3bucket = get_s3_bucket(args.exchange)
   s3outdir = get_s3_outpath(args.exchange) + '-s1'
-  create_ba_state(args.exchange)
+  #create_ba_state(args.exchange)
   app_name = 'cbp_{}_s1_writer'.format(args.exchange)
   setup_gateway(app_name)
   setup_subscriber_gauges(app_name)

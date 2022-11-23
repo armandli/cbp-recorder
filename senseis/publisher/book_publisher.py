@@ -14,7 +14,6 @@ from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_job_name, get_collector_registry, setup_basic_gauges
-from senseis.metric_utility import get_error_gauge
 from senseis.metric_utility import create_missed_book_gauge, get_missed_book_gauge
 
 #TODO: how to do you deal with incomplete sets that build up over time ?
@@ -47,23 +46,15 @@ async def book_extraction(url, pid, period, session, que, level):
           break
         if resp.status >= 300 and resp.status < 400:
           logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           break
         elif resp.status >= 400 and resp.status < 500:
           logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           break
         elif resp.status >= 500:
           logging.info("Request {} {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
       except asyncio.TimeoutError as err:
         logging.info("TimeoutError {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     if not data_good:
       logging.info("enqueue None {} {}".format(pid, periodic_time))
       get_missed_book_gauge().inc()
@@ -76,13 +67,9 @@ async def book_extraction(url, pid, period, session, que, level):
         await que.put((periodic_time, time_record, pid, data))
       except aiohttp.client_exceptions.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await que.put((periodic_time, time_record, pid, "\"\""))
       except asyncio.exceptions.TimeoutError as err:
         logging.error("Timeout Error {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)
     delta = t - periodic_time

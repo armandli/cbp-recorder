@@ -20,7 +20,7 @@ from senseis.pipe_consumer_producer import ETLState
 
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
-from senseis.metric_utility import get_live_gauge, get_error_gauge
+from senseis.metric_utility import get_live_gauge
 from senseis.metric_utility import create_etl_process_time_gauge, get_etl_process_time_gauge
 
 HIST_SIZE = 960
@@ -99,15 +99,11 @@ class ETLS1State(ETLState):
           self.bbprice[pid][nidx] = float(book_data['bids'][0][0])
         except ValueError:
           logging.error("cannot parse bid price: {}".format(book_data['bids'][0][0]))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           self.bbprice[pid][nidx] = float("nan")
         try:
           self.bbsize[pid][nidx] = float(book_data['bids'][0][1])
         except ValueError:
           logging.error("cannot parse bid size: {}".format(book_data['bids'][0][1]))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           self.bbsize[pid][nidx] = float("nan")
       if 'asks' not in book_data:
         logging.info("{} book data for {} missing asks".format(pid, timestamp))
@@ -118,15 +114,11 @@ class ETLS1State(ETLState):
           self.baprice[pid][nidx] = float(book_data['asks'][0][0])
         except ValueError:
           logging.error("cannot parse ask price: {}".format(book_data['asks'][0][0]))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           self.baprice[pid][nidx] = float("nan")
         try:
           self.basize[pid][nidx] = float(book_data['asks'][0][1])
         except ValueError:
           logging.error("cannot parse ask size: {}".format(book_data['asks'][0][1]))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           self.basize[pid][nidx] = float("nan")
       self.bba_imbalance[pid][nidx] = compute_book_imbalance(
         self.bbprice[pid][nidx], self.bbsize[pid][nidx], self.baprice[pid][nidx], self.basize[pid][nidx],
@@ -151,14 +143,10 @@ class ETLS1State(ETLState):
             total_size += float(t['size'])
           except ValueError:
             logging.error("cannot parse trade size: {}".format(t['size']))
-            get_error_gauge().inc()
-            push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           try:
             total_volume += float(t['price']) * float(t['size'])
           except ValueError:
             logging.error("cannot parse trade price or size: {} {}".format(t['price'], t['size']))
-            get_error_gauge().inc()
-            push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           side = t['side']
           if side == 'buy':
             count_buys += 1
@@ -269,8 +257,6 @@ class ETLS1State(ETLState):
     data[STIME_COLNAME] = self.utc.localize(datetime.utcfromtimestamp(timestamp)).strftime(DATETIME_FORMAT)
     if idx == -1:
       logging.error("Unexpected Error: Cannot find timestamp {} in state data".format(timestamp))
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       return data
     for pid in self.pids:
       data[pid + ":best_bid_price"] = self.bbprice[pid][idx]

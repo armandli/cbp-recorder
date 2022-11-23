@@ -16,7 +16,6 @@ from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
-from senseis.metric_utility import get_error_gauge
 from senseis.metric_utility import create_trade_count_gauge, get_trade_count_gauge
 
 #TODO: we can push this into utility
@@ -40,7 +39,6 @@ def filter_trade_data(data, last_trade_ids):
           filtered_data_dict.append(d)
       except ValueError:
         logging.error("Got empty trade id {}. skip".format(d))
-        get_error_gauge().inc()
     get_trade_count_gauge().set(len(filtered_data_dict))
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     out_data = json.dumps(filtered_data_dict)
@@ -61,7 +59,7 @@ def get_last_trade_ids(data, last_trade_ids):
       try:
         last_trade_ids.add(int(d['trade_id']))
       except ValueError:
-        get_error_gauge().inc()
+        logging.error("cannot convert trade_id into int: {}".format(d['trade_id']))
   except json.decoder.JSONDecodeError:
     return last_trade_ids
   except ValueError:
@@ -97,19 +95,15 @@ async def trade_extraction(url, pid, period, session, que):
           break
         if resp.status >= 300 and resp.status < 400:
           logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
           break
         elif resp.status >= 400 and resp.status < 500:
           logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
           break
         elif resp.status >= 500:
           logging.info("Request {} {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
           await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
       except asyncio.TimeoutError as err:
         logging.info("TimeoutError {}".format(err))
-        get_error_gauge().inc()
     if not data_good:
       logging.info("enqueue None {} {}".format(pid, periodic_time))
       await que.put((periodic_time, time_record, pid, "\"\""))
@@ -123,7 +117,6 @@ async def trade_extraction(url, pid, period, session, que):
         last_trade_ids = get_last_trade_ids(data, last_trade_ids)
       except aiohttp.client_exceptions.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
-        get_error_gauge().inc()
         await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)
     delta = t - periodic_time

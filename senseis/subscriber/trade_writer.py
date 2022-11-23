@@ -17,7 +17,6 @@ from senseis.extraction_producer_consumer import consume_extraction, extraction_
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name
 from senseis.metric_utility import create_live_gauge, setup_subscriber_gauges
-from senseis.metric_utility import get_error_gauge
 
 def convert_trade_time(time_str):
   try:
@@ -44,8 +43,6 @@ def data_to_df(data, exchange_name):
               trade_side = trade['side']
             except ValueError:
               logging.error("Unable to convert trade data {}. data skipped".format(trade))
-              get_error_gauge().inc()
-              push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
               continue
             d["pid"].append(pid)
             d[STIME_COLNAME].append(row[STIME_COLNAME])
@@ -59,8 +56,6 @@ def data_to_df(data, exchange_name):
     return df
   except Exception as e:
     logging.error("Unknown exception {}. creating empty data frame.".format(e))
-    get_error_gauge().inc()
-    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     pids = get_exchange_pids(exchange_name)
     columns = ["pid", STIME_COLNAME, RTIME_COLNAME, "time", "trade_id", "price", "size", "side"]
     d = {colname : [] for colname in columns}

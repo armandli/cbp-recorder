@@ -21,7 +21,7 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import S3_RETRY_TIME_SECOND
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_write_success_gauge, get_row_count_gauge, get_error_gauge, get_output_data_process_time_gauge
+from senseis.metric_utility import get_live_gauge, get_restarted_gauge, get_write_success_gauge, get_row_count_gauge, get_output_data_process_time_gauge
 
 def convert_trade_time(time_str):
   try:
@@ -59,25 +59,17 @@ async def product_extraction_producer(url, pid, period, session, que):
           break
         if resp.status >= 300 and resp.status < 400:
           logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           break
         # one error code 400, 429 too many requests
         elif resp.status >= 400 and resp.status < 500:
           logging.error("Request {} {} failed: retcode {} reason {}.".format(pid, periodic_time, resp.status, resp.reason))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           break
         # error code 524, 504
         elif resp.status >= 500:
           logging.info("Request {} failed: retcode {} reason {}. retrying in 10 milliseconds".format(pid, resp.status, resp.reason))
-          get_error_gauge().inc()
-          push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           await asyncio.sleep(RETRY_TIME / MICROSECONDS) # retry in 100 milliseconds
       except asyncio.TimeoutError as err:
         logging.info("TimeoutError {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     if not data_good:
       logging.info("Enqueue None {} {}".format(pid, periodic_time))
       await que.put((periodic_time, time_record, pid, "\"\""))
@@ -88,13 +80,9 @@ async def product_extraction_producer(url, pid, period, session, que):
         await que.put((periodic_time, time_record, pid, data))
       except aiohttp.client_exceptions.ClientPayloadError as err:
         logging.error("Client Payload Error {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await que.put((periodic_time, time_record, pid, "\"\""))
       except asyncio.exceptions.TimeoutError as err:
         logging.error("Timeout Error {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await que.put((periodic_time, time_record, pid, "\"\""))
     t = datetime.now(utc)
     delta = t - periodic_time
@@ -139,28 +127,28 @@ async def extraction_producer_consumer(producer_f, consumer_f, create_message_f,
         await que.join()
     except asyncio.CancelledError as err:
       logging.info("CancelledError {}".format(err))
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
+      get_restarted_gauge().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     except aiohttp.client_exceptions.ClientOSError as err:
       logging.info("ClientOSError {}".format(err))
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
+      get_restarted_gauge().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     except aiohttp.client_exceptions.ServerDisconnectedError as err:
       logging.info("ServerDisconnectedError {}".format(err))
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
+      get_restarted_gauge().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 def create_message(periodic_time, time_record, data):
   data[STIME_COLNAME] = periodic_time.strftime(DATETIME_FORMAT)
@@ -179,12 +167,20 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
       await que.join()
     except asyncio.CancelledError as err:
       logging.info("CancelledError {}".format(err))
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
+      get_restarted_gauge().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    except asyncio.TimeoutError as err:
+      logging.info("TimeoutError: {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_gauge().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 async def push_to_queue(que, msg: aio_pika.IncomingMessage):
   async with msg.process():
@@ -254,11 +250,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
           break
       except botocore.exceptions.ClientError as err:
         logging.info("botocore ClientError: {}".format(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await asyncio.sleep(S3_RETRY_TIME_SECOND)
       except Exception as err:
         logging.error("Unexpected write error: {}".fomat(err))
-        get_error_gauge().inc()
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await asyncio.sleep(S3_RETRY_TIME_SECOND)

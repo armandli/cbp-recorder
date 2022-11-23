@@ -19,7 +19,7 @@ from senseis.configuration import get_exchange_pids, is_book_exchange_name, is_t
 from senseis.extraction_producer_consumer import get_period, is_all_found
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_error_gauge
+from senseis.metric_utility import get_live_gauge, get_restarted_gauge
 
 def process_etl_data(period, data, state):
   book_data = dict()
@@ -84,11 +84,13 @@ async def push_incoming_to_queue(que, utc, exchange_name, msg: aio_pika.Incoming
     logging.info("Received from {}".format(exchange_name))
     await que.put((exchange_name, msg.body))
     # put task to sleep to yield to ETL process
-    t = datetime.now(utc)
-    next_sec = t + timedelta(seconds=1)
-    next_sec = next_sec - timedelta(seconds=0, microseconds=next_sec.microsecond)
-    delta = next_sec - t
-    await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
+    await asyncio.sleep(1.)
+
+#    t = datetime.now(utc)
+#    next_sec = t + timedelta(seconds=1)
+#    next_sec = next_sec - timedelta(seconds=0, microseconds=next_sec.microsecond)
+#    delta = next_sec - t
+#    await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
 
 async def data_subscriber(exchange_name, que):
   utc = pytz.timezone("UTC")
@@ -126,11 +128,10 @@ async def etl_consumer_producer(
       logging.info("Cancelled Error: {}".format(err))
       for task in tasks:
         task.cancel()
-      get_error_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
-
+      get_restarted_gauge().inc()
+      push_to_gateway(GETWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 class ETLState(ABC):
   def __init__(self):
