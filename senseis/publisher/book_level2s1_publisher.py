@@ -13,6 +13,7 @@ from senseis.configuration import BOOK_REQUEST_URL
 from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_book_level
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, extraction_consumer, create_message
+from senseis.extraction_producer_consumer import create_interval_state
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_job_name, get_collector_registry, setup_basic_gauges
 from senseis.metric_utility import create_missed_book_gauge, get_missed_book_gauge
@@ -111,6 +112,7 @@ def main():
   setup_gateway(app_name)
   setup_basic_gauges(app_name)
   create_missed_book_gauge(app_name)
+  create_interval_state()
   try:
     asyncio.run(
       extraction_producer_consumer(

@@ -15,6 +15,7 @@ from senseis.configuration import STIME_COLNAME
 from senseis.configuration import is_etl_exchange_name
 from senseis.calculation import compute_book_imbalance, compute_weighted_average_price, compute_return, compute_bidask_spread
 from senseis.extraction_producer_consumer import convert_trade_time
+from senseis.extraction_producer_consumer import create_interval_state
 from senseis.pipe_consumer_producer import etl_consumer_producer, data_subscriber, etl_processor, process_etl_data
 from senseis.pipe_consumer_producer import ETLState
 
@@ -323,6 +324,7 @@ def main():
   setup_gateway(app_name)
   setup_basic_gauges(app_name)
   create_etl_process_time_gauge(app_name)
+  create_interval_state()
   try:
     asyncio.run(
       etl_consumer_producer(

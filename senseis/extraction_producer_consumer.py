@@ -21,7 +21,21 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import S3_RETRY_TIME_SECOND
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_restarted_gauge, get_write_success_gauge, get_row_count_gauge, get_output_data_process_time_gauge
+from senseis.metric_utility import get_live_gauge, get_restarted_gauge, get_interval_gauge
+from senseis.metric_utility import get_write_success_gauge, get_row_count_gauge, get_output_data_process_time_gauge
+
+def create_interval_state():
+  global PREVIOUS_EPOCH
+  PREVIOUS_EPOCH = 0
+
+def get_interval(cur_epoch):
+  global PREVIOUS_EPOCH
+  if PREVIOUS_EPOCH == 0:
+    PREVIOUS_EPOCH = cur_epoch
+    return 0
+  interval = cur_epoch - PREVIOUS_EPOCH
+  PREVIOUS_EPOCH = cur_epoch
+  return interval
 
 def convert_trade_time(time_str):
   try:
@@ -108,6 +122,10 @@ async def extraction_consumer(pids, exchange_name, create_message_f, que):
         body = create_message_f(periodic_time, time_record, records[periodic_time])
         msg = aio_pika.Message(body=body)
         logging.info("Sending {}".format(periodic_time))
+        cur_epoch = int(datetime.strptime(periodic_time, DATETIME_FORMAT))
+        epoch_interval = get_interval(cur_epoch)
+        get_interval_gauge().set(epoch_interval)
+        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await exchange.publish(message=msg, routing_key='')
         get_live_gauge().set_to_current_time()
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
@@ -173,7 +191,8 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
       logging.info("Restarting")
       get_restarted_gauge().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-    except asyncio.TimeoutError as err:
+    #TODO: maybe we should handle this exception somewhere more precise and better
+    except TimeoutError as err:
       logging.info("TimeoutError: {}".format(err))
       for task in tasks:
         task.cancel()
@@ -207,7 +226,11 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
   while True:
     msg = await que.get()
     dat = json.loads(msg)
-    dat_period = get_period(int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp()), periodicity)
+    cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
+    epoch_interval = get_interval(cur_epoch)
+    get_interval_gauge().set(epoch_interval)
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    dat_period = get_period(cur_epoch, periodicity)
     if data:
       data_period = get_period(int(datetime.strptime(data[0][STIME_COLNAME], DATETIME_FORMAT).timestamp()), periodicity)
     else:

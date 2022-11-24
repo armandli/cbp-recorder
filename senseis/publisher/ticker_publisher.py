@@ -6,6 +6,7 @@ from senseis.configuration import TICKER_REQUEST_URL
 from senseis.configuration import get_exchange_pids, is_ticker_exchange_name
 from senseis.utility import setup_logging, build_publisher_parser
 from senseis.extraction_producer_consumer import extraction_producer_consumer, product_extraction_producer, extraction_consumer, create_message
+from senseis.extraction_producer_consumer import create_interval_state
 from senseis.metric_utility import setup_gateway, setup_basic_gauges
 
 def main():
@@ -19,6 +20,7 @@ def main():
   app_name = 'cbp_{}_writer'.format(args.exchange)
   setup_gateway(app_name)
   setup_basic_gauges(app_name)
+  create_interval_state()
   try:
     asyncio.run(
       extraction_producer_consumer(

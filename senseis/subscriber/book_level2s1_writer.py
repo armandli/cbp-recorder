@@ -14,6 +14,7 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import is_book_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
+from senseis.extraction_producer_consumer import create_interval_state
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_job_name, get_collector_registry, setup_subscriber_gauges
 
@@ -114,6 +115,7 @@ def data_to_df(data, exchange_name):
         alevel_size = pid_data['asks'][0]
         cur_bids = pid_data['bids'][1:]
         cur_asks = pid_data['asks'][1:]
+        # simplifying because downstream systems actually take all 30 levels anyway
         bid_level, ask_level = PUBLISHER_CAP, PUBLISHER_CAP
         #bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
         #set_last_bids_asks(pid, cur_bids, cur_asks)
@@ -141,6 +143,7 @@ def main():
   app_name = 'cbp_{}_s1_writer'.format(args.exchange)
   setup_gateway(app_name)
   setup_subscriber_gauges(app_name)
+  create_interval_state()
   try:
     asyncio.run(
       consume_extraction(

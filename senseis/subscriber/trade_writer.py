@@ -14,6 +14,7 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import is_trade_exchange_name, get_exchange_pids, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
+from senseis.extraction_producer_consumer import create_interval_state
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name
 from senseis.metric_utility import create_live_gauge, setup_subscriber_gauges
@@ -74,6 +75,7 @@ def main():
   app_name = 'cbp_{}_writer'.format(args.exchange)
   setup_gateway(app_name)
   setup_subscriber_gauges(app_name)
+  create_interval_state()
   try:
     asyncio.run(
       consume_extraction(

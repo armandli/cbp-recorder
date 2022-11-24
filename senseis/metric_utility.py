@@ -70,9 +70,17 @@ def create_restarted_gauge(app_name):
 def get_restarted_gauge():
   return ASYNC_RESTARTED_GAUGE
 
+def create_interval_gauge(app_name):
+  global INTERVAL_GAUGE
+  INTERVAL_GAUGE = Gauge(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
+
+def get_interval_gauge():
+  return INTERVAL_GAUGE
+
 def setup_basic_gauges(app_name):
   create_live_gauge(app_name)
   create_restarted_gauge(app_name)
+  create_interval_gauge(app_name)
 
 def setup_subscriber_gauges(app_name):
   create_live_gauge(app_name)
@@ -80,3 +88,4 @@ def setup_subscriber_gauges(app_name):
   create_write_success_gauge(app_name)
   create_row_count_gauge(app_name)
   create_output_data_process_time_gauge(app_name)
+  create_interval_gauge(app_name)
