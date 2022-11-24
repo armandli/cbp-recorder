@@ -58,7 +58,7 @@ def get_trade_count_gauge():
 
 def create_etl_process_time_histogram(app_name):
   global ETL_DATA_PROCESS_TIME_HISTOGRAM
-  ETL_DATA_PROCESS_TIME_HISTOGRAM = Gauge(app_name + "_etl_data_processing_time", "the time it took to process data for one period", registry=get_collector_registry())
+  ETL_DATA_PROCESS_TIME_HISTOGRAM = Histogram(app_name + "_etl_data_processing_time", "the time it took to process data for one period", registry=get_collector_registry())
 
 def get_etl_process_time_histogram():
   return ETL_DATA_PROCESS_TIME_HISTOGRAM
