@@ -122,7 +122,7 @@ async def extraction_consumer(pids, exchange_name, create_message_f, que):
         body = create_message_f(periodic_time, time_record, records[periodic_time])
         msg = aio_pika.Message(body=body)
         logging.info("Sending {}".format(periodic_time))
-        cur_epoch = int(datetime.strptime(periodic_time, DATETIME_FORMAT))
+        cur_epoch = int(utc.localize(periodic_time).timestamp())
         epoch_interval = get_interval(cur_epoch)
         get_interval_gauge().set(epoch_interval)
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
