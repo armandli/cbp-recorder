@@ -21,8 +21,8 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import S3_RETRY_TIME_SECOND
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_restarted_gauge, get_interval_gauge
-from senseis.metric_utility import get_write_success_gauge, get_row_count_gauge, get_output_data_process_time_gauge
+from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_summary
+from senseis.metric_utility import get_write_success_gauge, get_row_count_gauge, get_output_data_process_time_histogram
 
 def create_interval_state():
   global PREVIOUS_EPOCH
@@ -123,7 +123,7 @@ async def extraction_consumer(pids, exchange_name, create_message_f, que):
         logging.info("Sending {}".format(periodic_time))
         cur_epoch = int(periodic_time.timestamp())
         epoch_interval = get_interval(cur_epoch)
-        get_interval_gauge().set(epoch_interval)
+        get_interval_summary().observe(epoch_interval)
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await exchange.publish(message=msg, routing_key='')
         get_live_gauge().set_to_current_time()
@@ -148,7 +148,7 @@ async def extraction_producer_consumer(producer_f, consumer_f, create_message_f,
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
-      get_restarted_gauge().inc()
+      get_restarted_counter().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     except aiohttp.client_exceptions.ClientOSError as err:
       logging.info("ClientOSError {}".format(err))
@@ -156,7 +156,7 @@ async def extraction_producer_consumer(producer_f, consumer_f, create_message_f,
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
-      get_restarted_gauge().inc()
+      get_restarted_counter().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     except aiohttp.client_exceptions.ServerDisconnectedError as err:
       logging.info("ServerDisconnectedError {}".format(err))
@@ -164,7 +164,7 @@ async def extraction_producer_consumer(producer_f, consumer_f, create_message_f,
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
-      get_restarted_gauge().inc()
+      get_restarted_counter().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 def create_message(periodic_time, time_record, data):
@@ -188,16 +188,7 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
-      get_restarted_gauge().inc()
-      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-    #TODO: maybe we should handle this exception somewhere more precise and better
-    except TimeoutError as err:
-      logging.info("TimeoutError: {}".format(err))
-      for task in tasks:
-        task.cancel()
-      await asyncio.gather(*tasks, return_exceptions=True)
-      logging.info("Restarting")
-      get_restarted_gauge().inc()
+      get_restarted_counter().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 async def push_to_queue(que, msg: aio_pika.IncomingMessage):
@@ -227,7 +218,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     dat = json.loads(msg)
     cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
     epoch_interval = get_interval(cur_epoch)
-    get_interval_gauge().set(epoch_interval)
+    get_interval_summary().observe(epoch_interval)
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     dat_period = get_period(cur_epoch, periodicity)
     if data:
@@ -249,7 +240,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     df = data_to_df_f(data, exchange_name)
     logging.info("Dataframe size {}".format(len(df)))
     perf_output_time = time.perf_counter() - perf_output_time_start
-    get_output_data_process_time_gauge().set(perf_output_time)
+    get_output_data_process_time_histogram().observe(perf_output_time)
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     logging.info("Clearing Data")
     data.clear()

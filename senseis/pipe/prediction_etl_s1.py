@@ -22,7 +22,7 @@ from senseis.pipe_consumer_producer import ETLState
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
 from senseis.metric_utility import get_live_gauge
-from senseis.metric_utility import create_etl_process_time_gauge, get_etl_process_time_gauge
+from senseis.metric_utility import create_etl_process_time_histogram, get_etl_process_time_histogram
 
 HIST_SIZE = 960
 
@@ -303,7 +303,7 @@ class ETLS1State(ETLState):
 
     data["book_mean_return_27"] = self.bmreturn27[idx]
     perf_time_taken = time.perf_counter() - perf_start_time
-    get_etl_process_time_gauge().set(perf_time_taken)
+    get_etl_process_time_histogram().observe(perf_time_taken)
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     return data
 
@@ -323,7 +323,7 @@ def main():
   app_name = 'cbp_etl_s1_pipe'
   setup_gateway(app_name)
   setup_basic_gauges(app_name)
-  create_etl_process_time_gauge(app_name)
+  create_etl_process_time_histogram(app_name)
   create_interval_state()
   try:
     asyncio.run(

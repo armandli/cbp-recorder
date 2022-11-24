@@ -1,4 +1,4 @@
-from prometheus_client import CollectorRegistry, Gauge
+from prometheus_client import CollectorRegistry, Counter, Gauge, Summary, Histogram
 
 GATEWAY_URL='localhost:9091'
 
@@ -35,12 +35,12 @@ def create_row_count_gauge(app_name):
 def get_row_count_gauge():
   return ROW_COUNT_GAUGE
 
-def create_output_data_process_time_gauge(app_name):
-  global OUTPUT_DATA_PROCESS_TIME_GAUGE
-  OUTPUT_DATA_PROCESS_TIME_GAUGE = Gauge(app_name + "_output_data_processing_time", "the time it took to produce output data", registry=get_collector_registry())
+def create_output_data_process_time_histogram(app_name):
+  global OUTPUT_DATA_PROCESS_TIME_HISTOGRAM
+  OUTPUT_DATA_PROCESS_TIME_HISTOGRAM = Histogram(app_name + "_output_data_processing_time", "the time it took to produce output data", registry=get_collector_registry())
 
-def get_output_data_process_time_gauge():
-  return OUTPUT_DATA_PROCESS_TIME_GAUGE
+def get_output_data_process_time_histogram():
+  return OUTPUT_DATA_PROCESS_TIME_HISTOGRAM
 
 def create_missed_book_gauge(app_name):
   global MISSED_BOOK_GAUGE
@@ -56,36 +56,36 @@ def create_trade_count_gauge(app_name):
 def get_trade_count_gauge():
   return TRADE_COUNT_GAUGE
 
-def create_etl_process_time_gauge(app_name):
-  global ETL_DATA_PROCESS_TIME_GAUGE
-  ETL_DATA_PROCESS_TIME_GAUGE = Gauge(app_name + "_etl_data_processing_time", "the time it took to process data for one period", registry=get_collector_registry())
+def create_etl_process_time_histogram(app_name):
+  global ETL_DATA_PROCESS_TIME_HISTOGRAM
+  ETL_DATA_PROCESS_TIME_HISTOGRAM = Gauge(app_name + "_etl_data_processing_time", "the time it took to process data for one period", registry=get_collector_registry())
 
-def get_etl_process_time_gauge():
-  return ETL_DATA_PROCESS_TIME_GAUGE
+def get_etl_process_time_histogram():
+  return ETL_DATA_PROCESS_TIME_HISTOGRAM
 
-def create_restarted_gauge(app_name):
-  global ASYNC_RESTARTED_GAUGE
-  ASYNC_RESTARTED_GAUGE = Gauge(app_name + "_restarted_count", "number of times process restarted all asynchronous tasks", registry=get_collector_registry())
+def create_restarted_counter(app_name):
+  global ASYNC_RESTARTED_COUNTER
+  ASYNC_RESTARTED_COUNTER = Counter(app_name + "_restarted_count", "number of times process restarted all asynchronous tasks", registry=get_collector_registry())
 
-def get_restarted_gauge():
-  return ASYNC_RESTARTED_GAUGE
+def get_restarted_counter():
+  return ASYNC_RESTARTED_COUNTER
 
-def create_interval_gauge(app_name):
-  global INTERVAL_GAUGE
-  INTERVAL_GAUGE = Gauge(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
+def create_interval_summary(app_name):
+  global INTERVAL_SUMMARY
+  INTERVAL_SUMMARY = Summary(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
 
-def get_interval_gauge():
-  return INTERVAL_GAUGE
+def get_interval_summary():
+  return INTERVAL_SUMMARY
 
 def setup_basic_gauges(app_name):
   create_live_gauge(app_name)
-  create_restarted_gauge(app_name)
-  create_interval_gauge(app_name)
+  create_restarted_counter(app_name)
+  create_interval_summary(app_name)
 
 def setup_subscriber_gauges(app_name):
   create_live_gauge(app_name)
-  create_restarted_gauge(app_name)
+  create_restarted_counter(app_name)
   create_write_success_gauge(app_name)
   create_row_count_gauge(app_name)
-  create_output_data_process_time_gauge(app_name)
-  create_interval_gauge(app_name)
+  create_output_data_process_time_histogram(app_name)
+  create_interval_summary(app_name)

@@ -20,7 +20,7 @@ from senseis.extraction_producer_consumer import get_period, is_all_found
 from senseis.extraction_producer_consumer import get_interval
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_restarted_gauge, get_interval_gauge
+from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_summary
 
 def process_etl_data(period, data, state):
   book_data = dict()
@@ -58,7 +58,7 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
       dat = json.loads(msg)
       cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
       epoch_interval = get_interval(cur_epoch)
-      get_interval_gauge().set(epoch_interval)
+      get_interval_summary().observe(epoch_interval)
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
       #TODO: this is a bad idea, period other than 1 will not represent time, but it is treated like time in seconds already
       dat_period = get_period(cur_epoch, periodicity)
@@ -135,7 +135,7 @@ async def etl_consumer_producer(
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
-      get_restarted_gauge().inc()
+      get_restarted_counter().inc()
       push_to_gateway(GETWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 class ETLState(ABC):

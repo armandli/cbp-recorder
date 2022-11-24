@@ -53,6 +53,9 @@ def main():
         args.period * 60
       )
     )
+  except TimeoutError as err:
+    logging.error("Complete Failure TimeoutError in OS: {}".format(err))
+    print("Complete Failure TimeoutError in OS. {}".format(err))
   except Exception as err:
     logging.error("Complete Failure: {}".format(err))
     print("Complete Failure: {}".format(err))
