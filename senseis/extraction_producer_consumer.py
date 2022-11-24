@@ -104,7 +104,6 @@ async def product_extraction_producer(url, pid, period, session, que):
     await asyncio.sleep(diff / MICROSECONDS)
 
 async def extraction_consumer(pids, exchange_name, create_message_f, que):
-  utc = pytz.timezone("UTC")
   records = dict()
   mq_connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
   async with mq_connection:
@@ -122,7 +121,7 @@ async def extraction_consumer(pids, exchange_name, create_message_f, que):
         body = create_message_f(periodic_time, time_record, records[periodic_time])
         msg = aio_pika.Message(body=body)
         logging.info("Sending {}".format(periodic_time))
-        cur_epoch = int(utc.localize(periodic_time).timestamp())
+        cur_epoch = int(periodic_time.timestamp())
         epoch_interval = get_interval(cur_epoch)
         get_interval_gauge().set(epoch_interval)
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
