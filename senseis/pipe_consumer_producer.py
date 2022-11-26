@@ -199,7 +199,7 @@ class ETLState(ABC):
     return math.sqrt(s)
 
   def rolling_max(self, data, idx, timestamp, length):
-    s = float("nan")
+    s = float("-inf")
     min_timestamp = timestamp - length
     for i in range(length):
       if self.timestamps[(idx - i) % self.hist_size()] is None or \
@@ -210,7 +210,7 @@ class ETLState(ABC):
     return s
 
   def rolling_min(self, data, idx, timestamp, length):
-    s = float("nan")
+    s = float("inf")
     min_timestamp = timestamp - length
     for i in range(length):
       if self.timestamps[(idx - i) % self.hist_size()] is None or \

@@ -311,7 +311,7 @@ class ETLS2State(ETLState):
       return s / float(count - nan_count)
 
   def rolling_max_aoa(self, data, idx, ioidx, timestamp, length):
-    s = float("nan")
+    s = float("-inf")
     min_timestamp = timestamp - length
     for i in range(length):
       if self.timestamps[(idx - i) % self.hist_size()] is None or \
@@ -323,7 +323,7 @@ class ETLS2State(ETLState):
     return s
 
   def rolling_min_aoa(self, data, idx, ioidx, timestamp, length):
-    s = float("nan")
+    s = float("inf")
     min_timestamp = timestamp - length
     for i in range(length):
       if self.timestamps[(idx - i) % self.hist_size()] is None or \

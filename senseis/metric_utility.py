@@ -70,6 +70,7 @@ def create_restarted_counter(app_name):
 def get_restarted_counter():
   return ASYNC_RESTARTED_COUNTER
 
+#TODO: this is not useful as summary, maybe histogram, or gauge
 def create_interval_summary(app_name):
   global INTERVAL_SUMMARY
   INTERVAL_SUMMARY = Summary(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
