@@ -22,7 +22,7 @@ from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
 from senseis.configuration import S3_RETRY_TIME_SECOND
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_summary
+from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_gauge
 from senseis.metric_utility import get_write_success_gauge, get_row_count_gauge, get_output_data_process_time_histogram
 
 def create_interval_state():
@@ -124,7 +124,7 @@ async def extraction_consumer(pids, exchange_name, create_message_f, que):
         logging.info("Sending {}".format(periodic_time))
         cur_epoch = int(periodic_time.timestamp())
         epoch_interval = get_interval(cur_epoch)
-        get_interval_summary().observe(epoch_interval)
+        get_interval_gauge().set(epoch_interval)
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
         await exchange.publish(message=msg, routing_key='')
         get_live_gauge().set_to_current_time()
@@ -219,7 +219,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     dat = json.loads(msg)
     cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
     epoch_interval = get_interval(cur_epoch)
-    get_interval_summary().observe(epoch_interval)
+    get_interval_gauge().set(epoch_interval)
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     dat_period = get_period(cur_epoch, periodicity)
     if data:

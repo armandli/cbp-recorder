@@ -70,18 +70,17 @@ def create_restarted_counter(app_name):
 def get_restarted_counter():
   return ASYNC_RESTARTED_COUNTER
 
-#TODO: this is not useful as summary, maybe histogram, or gauge
-def create_interval_summary(app_name):
-  global INTERVAL_SUMMARY
-  INTERVAL_SUMMARY = Summary(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
+def create_interval_gauge(app_name):
+  global INTERVAL_GAUGE
+  INTERVAL_GAUGE = Summary(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
 
-def get_interval_summary():
-  return INTERVAL_SUMMARY
+def get_interval_gauge():
+  return INTERVAL_GAUGE
 
 def setup_basic_gauges(app_name):
   create_live_gauge(app_name)
   create_restarted_counter(app_name)
-  create_interval_summary(app_name)
+  create_interval_gauge(app_name)
 
 def setup_subscriber_gauges(app_name):
   create_live_gauge(app_name)
@@ -89,4 +88,4 @@ def setup_subscriber_gauges(app_name):
   create_write_success_gauge(app_name)
   create_row_count_gauge(app_name)
   create_output_data_process_time_histogram(app_name)
-  create_interval_summary(app_name)
+  create_interval_gauge(app_name)
