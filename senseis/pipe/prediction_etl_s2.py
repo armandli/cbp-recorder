@@ -32,7 +32,7 @@ def build_parser():
   parser = argparse.ArgumentParser(description="parameters")
   parser.add_argument('--period', type=int, help='periodicity in seconds', default=1)
   parser.add_argument('--b20name', type=str, help='book level2 0 exchange name', default='book_level2_0')
-  parser.add_argument('--b11name', type=str, help='book level2 1 exchange name', default='book_level2_1')
+  parser.add_argument('--b21name', type=str, help='book level2 1 exchange name', default='book_level2_1')
   parser.add_argument('--t0name', type=str, help='trade 0 exchange name', default='trade_exchange_0')
   parser.add_argument('--t1name', type=str, help='trade 1 exchange name', default='trade_exchange_1')
   parser.add_argument('--exchange', type=str, help='etl exchange name', required=True)
@@ -122,7 +122,7 @@ class ETLS2State(ETLState):
 
   def insert(self, timestamp, pid_book, pid_trade):
     nidx = self.nidx
-    pix = (nidx - 1) % self.hist_size()
+    pidx = (nidx - 1) % self.hist_size()
     self.timestamps[nidx] = timestamp
     for pid in self.pids:
       # book data insertion
@@ -136,13 +136,13 @@ class ETLS2State(ETLState):
           try:
             bid_prices.append(float(book_data['bids'][i][0]))
           except ValueError:
-            bid_prices.append(float("nan"))
             logging.error("cannot parse bid price: {}".format(book_data['bids'][i][0]))
+            bid_prices.append(float("nan"))
           try:
             bid_sizes.append(float(book_data['bids'][i][1]))
           except ValueError:
-            bid_sizes.append(float("nan"))
             logging.error("cannot parse bid size: {}".format(book_data['bids'][i][1]))
+            bid_sizes.append(float("nan"))
       self.bbidprices[pid][nidx] = bid_prices
       self.bbidsizes[pid][nidx] = bid_sizes
       ask_prices = []
@@ -154,13 +154,13 @@ class ETLS2State(ETLState):
           try:
             ask_prices.append(float(book_data['asks'][i][0]))
           except ValueError:
-            ask_prices.append(float("nan"))
             logging.error("cannot parse ask price: {}".format(book_data['asks'][i][0]))
+            ask_prices.append(float("nan"))
           try:
             ask_sizes.append(float(book_data['asks'][i][1]))
           except ValueError:
-            ask_sizes.append(float("nan"))
             logging.error("cannot parse ask size: {}".format(book_data['asks'][i][1]))
+            ask_sizes.append(float("nan"))
       self.baskprices[pid][nidx] = ask_prices
       self.basksizes[pid][nidx] = ask_sizes
       if 'bids' not in book_data:
@@ -217,7 +217,7 @@ class ETLS2State(ETLState):
         self.wapprice[pid][nidx] = compute_weighted_average_price(
           self.bbidprices[pid][nidx][0], self.bbidsizes[pid][nidx][0], self.baskprices[pid][nidx][0], self.basksizes[pid][nidx][0],
         )
-      self.breturn[pid][nidx] = compute_return(self.wapprice[pid][pidx], self.wrapprice[pid][nidx])
+      self.breturn[pid][nidx] = compute_return(self.wapprice[pid][pidx], self.wapprice[pid][nidx])
       if len(self.bbidprices[pid][nidx]) == 0 or len(self.baskprices[pid][nidx]) == 0:
         self.bbaspread[pid][nidx] = float("nan")
       else:
@@ -257,7 +257,7 @@ class ETLS2State(ETLState):
         self.treturn[pid][nidx] = float("nan")
         idx = pidx
         while idx != nidx:
-          if math.isnan(self.timestamsp[idx]) or self.timestamps[idx] > self.timestamps[nidx]:
+          if self.timestamps[idx] is None or self.timestamps[idx] > self.timestamps[nidx]:
             break
           if not math.isnan(self.tavgprice[pid][idx]):
             self.treturn[pid][nidx] = compute_return(self.tavgprice[pid][idx], self.tavgprice[pid][nidx])
@@ -266,7 +266,7 @@ class ETLS2State(ETLState):
     self.bmreturn27[nidx] = self.rolling_mean_return(nidx, timestamp, 27)
     self.nidx = (self.nidx + 1) % self.hist_size()
 
-  def rolling_avg_aoa(self, data, idx, ioidx, timestamp, k, count_nan=False):
+  def rolling_avg_aoa(self, data, idx, ioidx, timestamp, length, count_nan=False):
     s = 0.
     nan_count = 0
     count = 0
@@ -288,7 +288,7 @@ class ETLS2State(ETLState):
     else:
       return s / float(count - nan_count)
 
-  def rolling_abs_avg(self, data, idx, timestamp, k, count_nan=False):
+  def rolling_abs_avg(self, data, idx, timestamp, length, count_nan=False):
     s = 0.
     nan_count = 0
     count = 0
@@ -310,19 +310,19 @@ class ETLS2State(ETLState):
     else:
       return s / float(count - nan_count)
 
-  def rolling_max_aoa(self, data, idx, ioidx, timestamp, k):
+  def rolling_max_aoa(self, data, idx, ioidx, timestamp, length):
     s = float("nan")
     min_timestamp = timestamp - length
     for i in range(length):
       if self.timestamps[(idx - i) % self.hist_size()] is None or \
          self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
-         self.timestamsp[(idx - i) % self.hist_size()] <= min_timestamp:
+         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
         break
       if len(data[(idx - i) % self.hist_size()]) > ioidx:
         s = max(s, data[(idx - i) % self.hist_size()][ioidx])
     return s
 
-  def rolling_min_aoa(self, data, idx, ioidx, timestamp, k):
+  def rolling_min_aoa(self, data, idx, ioidx, timestamp, length):
     s = float("nan")
     min_timestamp = timestamp - length
     for i in range(length):
@@ -346,9 +346,9 @@ class ETLS2State(ETLState):
     nan_count = 0
     min_timestamp = timestamp - length
     for i in range(length):
-      if self.timestamps[(idx - i) % self.self.hist_size()] is None or \
-         self.timestamps[(idx - i) % self.self.hist_size()] > timestamp or \
-         self.timestamps[(idx - i) % self.self.hist_size()] <= min_timestamp:
+      if self.timestamps[(idx - i) % self.hist_size()] is None or \
+         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
+         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
         return float("nan")
       if not math.isnan(self.bmreturn27[(idx - i) % self.hist_size()]) and not math.isnan(prdata[(idx - i) % self.hist_size()]):
         m2sum += self.bmreturn27[(idx - i) % self.hist_size()] ** 2
@@ -433,7 +433,7 @@ class ETLS2State(ETLState):
   def produce_output(self, timestamp):
     perf_start_time = time.perf_counter()
     idx = -1
-    for i in range(len(self.timestsamps)):
+    for i in range(len(self.timestamps)):
       if self.timestamps[i] == timestamp:
         idx = i
         break

@@ -22,6 +22,8 @@ from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
 from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_summary
 
+ETL_QUEUE_SIZE_THRESHOLD = 6
+
 def process_etl_data(period, data, state):
   book_data = dict()
   trade_data = dict()
@@ -53,6 +55,7 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
   async with mq_connection:
     channel = await mq_connection.channel()
     exchange = await channel.declare_exchange(name=output_exchange_name, type='fanout')
+    logging.info("Pushing to {}".format(output_exchange_name))
     while True:
       ie_name, msg = await que.get()
       dat = json.loads(msg)
@@ -78,7 +81,7 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
           msg = aio_pika.Message(body=output)
           logging.info("Sending {}".format(period_str))
           await exchange.publish(message=msg, routing_key='')
-          logging.info("Published ETL data for period {}".format(period))
+          logging.info("Published ETL data for period {}".format(period_str))
           get_live_gauge().set_to_current_time()
           push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
           records.pop(period, None)
@@ -87,15 +90,14 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
 async def push_incoming_to_queue(que, utc, exchange_name, msg: aio_pika.IncomingMessage):
   async with msg.process():
     logging.info("Received from {}".format(exchange_name))
+    while que.qsize() > ETL_QUEUE_SIZE_THRESHOLD:
+      logging.info("Queue reaching {}. yielding {} receiver to consumer.".format(que.qsize(), exchange_name))
+      t = datetime.now(utc)
+      next_sec = t + timedelta(seconds=1)
+      next_sec = next_sec - timedelta(seconds=0, microseconds=next_sec.microsecond)
+      delta = next_sec - t
+      await asyncio.sleep(delta.microseconds / MICROSECONDS)
     await que.put((exchange_name, msg.body))
-    # put task to sleep to yield to ETL process
-    await asyncio.sleep(1.)
-
-#    t = datetime.now(utc)
-#    next_sec = t + timedelta(seconds=1)
-#    next_sec = next_sec - timedelta(seconds=0, microseconds=next_sec.microsecond)
-#    delta = next_sec - t
-#    await asyncio.sleep((delta.seconds * MICROSECONDS + delta.microseconds) / MICROSECONDS)
 
 async def data_subscriber(exchange_name, que):
   utc = pytz.timezone("UTC")
