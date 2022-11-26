@@ -91,6 +91,7 @@ def main():
   setup_gateway(app_name)
   setup_basic_gauges(app_name)
   create_missed_book_gauge(app_name)
+  create_interval_state()
   try:
     asyncio.run(
       extraction_producer_consumer(
