@@ -72,7 +72,7 @@ def get_restarted_counter():
 
 def create_interval_gauge(app_name):
   global INTERVAL_GAUGE
-  INTERVAL_GAUGE = Summary(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
+  INTERVAL_GAUGE = Gauge(app_name + "_data_interval", "the time in seconds between each datapoint sent or received", registry=get_collector_registry())
 
 def get_interval_gauge():
   return INTERVAL_GAUGE
