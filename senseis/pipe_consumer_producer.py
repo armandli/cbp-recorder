@@ -14,6 +14,7 @@ from prometheus_client import push_to_gateway
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import MICROSECONDS
 from senseis.configuration import STIME_COLNAME
+from senseis.configuration import ETL_QUEUE_SIZE
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
 from senseis.configuration import get_exchange_pids, is_book_exchange_name, is_trade_exchange_name
 from senseis.extraction_producer_consumer import get_period, is_all_found
@@ -21,8 +22,6 @@ from senseis.extraction_producer_consumer import get_interval
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
 from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_summary
-
-ETL_QUEUE_SIZE_THRESHOLD = 6
 
 def process_etl_data(period, data, state):
   book_data = dict()
@@ -90,13 +89,6 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
 async def push_incoming_to_queue(que, utc, exchange_name, msg: aio_pika.IncomingMessage):
   async with msg.process():
     logging.info("Received from {}".format(exchange_name))
-    while que.qsize() > ETL_QUEUE_SIZE_THRESHOLD:
-      logging.info("Queue reaching {}. yielding {} receiver to consumer.".format(que.qsize(), exchange_name))
-      t = datetime.now(utc)
-      next_sec = t + timedelta(seconds=1)
-      next_sec = next_sec - timedelta(seconds=0, microseconds=next_sec.microsecond)
-      delta = next_sec - t
-      await asyncio.sleep(delta.microseconds / MICROSECONDS)
     await que.put((exchange_name, msg.body))
 
 async def data_subscriber(exchange_name, que):
@@ -125,7 +117,7 @@ async def etl_consumer_producer(
   tasks = []
   while True:
     try:
-      que = asyncio.Queue()
+      que = asyncio.Queue(maxsize=ETL_QUEUE_SIZE)
       tasks.append(asyncio.create_task(etl_processor_f(process_etl_data_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que)))
       for input_exchange in input_exchange_names:
           tasks.append(asyncio.create_task(data_subscriber_f(input_exchange, que)))

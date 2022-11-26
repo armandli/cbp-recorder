@@ -15,6 +15,7 @@ from prometheus_client import push_to_gateway
 
 from senseis.configuration import DATETIME_FORMAT, TICKER_TIME_FORMAT1, TICKER_TIME_FORMAT2
 from senseis.configuration import MICROSECONDS, RETRY_TIME, NUM_RETRIES
+from senseis.configuration import EXTRACTION_QUEUE_SIZE
 from senseis.configuration import QUEUE_HOST, QUEUE_PORT, QUEUE_USER, QUEUE_PASSWORD
 from senseis.configuration import S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
 from senseis.configuration import STIME_COLNAME, RTIME_COLNAME
@@ -135,7 +136,7 @@ async def extraction_producer_consumer(producer_f, consumer_f, create_message_f,
   while True:
     tasks = []
     try:
-      que = asyncio.Queue()
+      que = asyncio.Queue(maxsize=EXTRACTION_QUEUE_SIZE)
       async with aiohttp.ClientSession() as session:
         tasks.append(asyncio.create_task(consumer_f(pids=pids, exchange_name=exchange_name, create_message_f=create_message_f, que=que)))
         for pid in pids:

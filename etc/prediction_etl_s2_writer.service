@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/home/armandli/cbp-recorder
-ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && prediction_etl_writer --exchange etl_exchange_s2 --period 128 --logfile prediction_etl_s2_writer.log'
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && prediction_etl_writer --exchange etl_exchange_s2 --period 64 --logfile prediction_etl_s2_writer.log'
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:/home/armandli/cbp-recorder/prediction_etl_s2_writer_io.log
 StandardError=inherit
