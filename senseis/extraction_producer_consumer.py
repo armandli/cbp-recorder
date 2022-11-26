@@ -242,16 +242,13 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     logging.info("Dataframe size {}".format(len(df)))
     perf_output_time = time.perf_counter() - perf_output_time_start
     get_output_data_process_time_histogram().observe(perf_output_time)
-    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-    logging.info("Clearing Data")
-    data.clear()
-    data.append(dat)
-    que.task_done()
-    logging.info("Creating dataframe")
-    parquet_buffer = BytesIO()
-    df.to_parquet(parquet_buffer, index=False)
     get_row_count_gauge().set(df.shape[0])
     push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    data.clear()
+    data.append(dat)
+    logging.info("Creating parquet")
+    parquet_buffer = BytesIO()
+    df.to_parquet(parquet_buffer, index=False)
     session = abcsession.get_session()
     while True:
       try:
@@ -268,3 +265,4 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
       except Exception as err:
         logging.error("Unexpected write error: {}".fomat(err))
         await asyncio.sleep(S3_RETRY_TIME_SECOND)
+    que.task_done()
