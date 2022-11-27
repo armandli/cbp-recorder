@@ -3,6 +3,7 @@ import json
 import math
 from datetime import datetime, timedelta
 import pytz
+import zlib
 from functools import partial
 from abc import ABC, abstractmethod
 
@@ -40,7 +41,7 @@ def process_etl_data(period, data, state):
   output = state.produce_output(period)
   logging.info("Output production complete")
   message = json.dumps(output)
-  return message.encode()
+  return zlib.compress(message.encode())
 
 async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que):
   utc = pytz.timezone("UTC")
@@ -89,7 +90,8 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
 async def push_incoming_to_queue(que, utc, exchange_name, msg: aio_pika.IncomingMessage):
   async with msg.process():
     logging.info("Received from {}".format(exchange_name))
-    await que.put((exchange_name, msg.body))
+    data = zlib.decompress(msg.body).decode()
+    await que.put((exchange_name, data))
 
 async def data_subscriber(exchange_name, que):
   utc = pytz.timezone("UTC")

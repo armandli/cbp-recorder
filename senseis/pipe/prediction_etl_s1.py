@@ -45,8 +45,10 @@ class ETLS1State(ETLState):
     # book data
     self.bbprice = dict()
     self.bbsize = dict()
+    self.bbhand = dict()
     self.baprice = dict()
     self.basize = dict()
+    self.bahand = dict()
     self.bba_imbalance = dict()
     self.waprice = dict()
     self.breturn = dict()
@@ -71,8 +73,10 @@ class ETLS1State(ETLState):
         # update book data
         self.bbprice[pid] =       [float("nan") for _ in range(self.hist_size())]
         self.bbsize[pid] =        [float("nan") for _ in range(self.hist_size())]
+        self.bbhand[pid] =        [float("nan") for _ in range(self.hist_size())]
         self.baprice[pid] =       [float("nan") for _ in range(self.hist_size())]
         self.basize[pid] =        [float("nan") for _ in range(self.hist_size())]
+        self.bahand[pid] =        [float("nan") for _ in range(self.hist_size())]
         self.bba_imbalance[pid] = [float("nan") for _ in range(self.hist_size())]
         self.waprice[pid] =       [float("nan") for _ in range(self.hist_size())]
         self.breturn[pid] =       [float("nan") for _ in range(self.hist_size())]
@@ -95,6 +99,7 @@ class ETLS1State(ETLState):
         logging.info("{} book data for {} missing bids".format(pid, timestamp))
         self.bbprice[pid][nidx] = float("nan")
         self.bbsize[pid][nidx] = float("nan")
+        self.bbhand[pid][nidx] = float("nan")
       else:
         try:
           self.bbprice[pid][nidx] = float(book_data['bids'][0][0])
@@ -106,10 +111,16 @@ class ETLS1State(ETLState):
         except ValueError:
           logging.error("cannot parse bid size: {}".format(book_data['bids'][0][1]))
           self.bbsize[pid][nidx] = float("nan")
+        try:
+          self.bbhand[pid][nidx] = float(book_data['bids'][0][2])
+        except ValueError:
+          logging.error("cannot parse bid hand: {}".format(book_data['bids'][0][2]))
+          self.bbhand[pid][nidx] = float("nan")
       if 'asks' not in book_data:
         logging.info("{} book data for {} missing asks".format(pid, timestamp))
         self.baprice[pid][nidx] = float("nan")
         self.basize[pid][nidx] = float("nan")
+        self.bahand[pid][nidx] = float("nan")
       else:
         try:
           self.baprice[pid][nidx] = float(book_data['asks'][0][0])
@@ -121,6 +132,11 @@ class ETLS1State(ETLState):
         except ValueError:
           logging.error("cannot parse ask size: {}".format(book_data['asks'][0][1]))
           self.basize[pid][nidx] = float("nan")
+        try:
+          self.bahand[pid][nidx] = float(book_data['asks'][0][2])
+        except ValueError:
+          logging.error("cannot parse ask hand: {}".format(book_data['asks'][0][2]))
+          self.bahand[pid][nidx] = float("nan")
       self.bba_imbalance[pid][nidx] = compute_book_imbalance(
         self.bbprice[pid][nidx], self.bbsize[pid][nidx], self.baprice[pid][nidx], self.basize[pid][nidx],
         self.bbprice[pid][pidx], self.bbsize[pid][pidx], self.baprice[pid][pidx], self.basize[pid][pidx]
@@ -213,6 +229,12 @@ class ETLS1State(ETLState):
     data[pid + ":best_ask_size_{}avg".format(k)]  = self.rolling_avg(self.basize[pid], idx, timestamp, k)
     data[pid + ":best_ask_size_{}max".format(k)]  = self.rolling_max(self.basize[pid], idx, timestamp, k)
     data[pid + ":best_ask_size_{}min".format(k)]  = self.rolling_min(self.basize[pid], idx, timestamp, k)
+    data[pid + ":best_bid_hand_{}avg".format(k)]  = self.rolling_avg(self.bbhand[pid], idx, timestamp, k)
+    data[pid + ":best_bid_hand_{}max".format(k)]  = self.rolling_max(self.bbhand[pid], idx, timestamp, k)
+    data[pid + ":best_bid_hand_{}min".format(k)]  = self.rolling_min(self.bbhand[pid], idx, timestamp, k)
+    data[pid + ":best_ask_hand_{}avg".format(k)]  = self.rolling_avg(self.bahand[pid], idx, timestamp, k)
+    data[pid + ":best_ask_hand_{}max".format(k)]  = self.rolling_max(self.bahand[pid], idx, timestamp, k)
+    data[pid + ":best_ask_hand_{}min".format(k)]  = self.rolling_min(self.bahand[pid], idx, timestamp, k)
     data[pid + ":ba_imbalance_{}avg".format(k)]   = self.rolling_avg(self.bba_imbalance[pid], idx, timestamp, k)
     data[pid + ":ba_imbalance_{}max".format(k)]   = self.rolling_max(self.bba_imbalance[pid], idx, timestamp, k)
     data[pid + ":ba_imbalance_{}min".format(k)]   = self.rolling_min(self.bba_imbalance[pid], idx, timestamp, k)
@@ -264,6 +286,8 @@ class ETLS1State(ETLState):
       data[pid + ":best_ask_price"] = self.baprice[pid][idx]
       data[pid + ":best_bid_size"]  = self.bbsize[pid][idx]
       data[pid + ":best_ask_size"]  = self.basize[pid][idx]
+      data[pid + ":best_bid_hand"]  = self.bbhand[pid][idx]
+      data[pid + ":best_ask_hand"]  = self.bahand[pid][idx]
       data[pid + ":ba_imbalance"]   = self.bba_imbalance[pid][idx]
       data[pid + ":wap"]            = self.waprice[pid][idx]
       data[pid + ":book_return"]    = self.breturn[pid][idx]

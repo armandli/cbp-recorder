@@ -4,6 +4,7 @@ import json
 import pytz
 import time
 from datetime import datetime, timedelta
+import zlib
 from functools import partial
 import botocore
 import asyncio
@@ -172,7 +173,7 @@ def create_message(periodic_time, time_record, data):
   data[STIME_COLNAME] = periodic_time.strftime(DATETIME_FORMAT)
   data[RTIME_COLNAME] = periodic_time.strftime(DATETIME_FORMAT)
   message = json.dumps(data)
-  return message.encode()
+  return zlib.compress(message.encode())
 
 async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity):
   tasks = []
@@ -194,7 +195,8 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
 
 async def push_to_queue(que, msg: aio_pika.IncomingMessage):
   async with msg.process():
-    await que.put(msg.body)
+    data = zlib.decompress(msg.body).decode()
+    await que.put(data)
 
 async def extraction_subscriber(exchange_name, que):
   connection = await aio_pika.connect_robust(host=QUEUE_HOST, port=QUEUE_PORT, login=QUEUE_USER, password=QUEUE_PASSWORD)
@@ -220,7 +222,6 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
     cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
     epoch_interval = get_interval(cur_epoch)
     get_interval_gauge().set(epoch_interval)
-    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     dat_period = get_period(cur_epoch, periodicity)
     if data:
       data_period = get_period(int(datetime.strptime(data[0][STIME_COLNAME], DATETIME_FORMAT).timestamp()), periodicity)

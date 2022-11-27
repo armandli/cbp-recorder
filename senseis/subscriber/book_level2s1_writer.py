@@ -119,8 +119,8 @@ def data_to_df(data, exchange_name):
         bid_level, ask_level = PUBLISHER_CAP, PUBLISHER_CAP
         #bid_level, ask_level = compute_take_level(pid, cur_bids, cur_asks)
         #set_last_bids_asks(pid, cur_bids, cur_asks)
-        taking_bids = [b[:2] for b in cur_bids[:min(bid_level, len(cur_bids))]]
-        taking_asks = [a[:2] for a in cur_asks[:min(ask_level, len(cur_asks))]]
+        taking_bids = [b for b in cur_bids[:min(bid_level, len(cur_bids))]]
+        taking_asks = [a for a in cur_asks[:min(ask_level, len(cur_asks))]]
         d[pid + ':' + 'bids'].append(np.array(taking_bids, dtype=np.float32).flatten())
         d[pid + ':' + 'asks'].append(np.array(taking_asks, dtype=np.float32).flatten())
         d[pid + ':' + 'sequence'].append(int(pid_data['sequence']))
