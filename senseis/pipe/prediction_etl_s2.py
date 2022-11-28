@@ -51,6 +51,8 @@ class ETLS2State(ETLState):
     self.baskprices = dict()
     self.bbidsizes = dict()
     self.basksizes = dict()
+    self.bbidhands = dict()
+    self.baskhands = dict()
     self.bbidstacksize = dict()
     self.baskstacksize = dict()
 
@@ -93,6 +95,8 @@ class ETLS2State(ETLState):
         self.baskprices[pid]    = [[] for _ in range(self.hist_size())]
         self.bbidsizes[pid]     = [[] for _ in range(self.hist_size())]
         self.basksizes[pid]     = [[] for _ in range(self.hist_size())]
+        self.bbidhands[pid]     = [[] for _ in range(self.hist_size())]
+        self.baskhands[pid]     = [[] for _ in range(self.hist_size())]
         self.bbidstacksize[pid] = [float("nan") for _ in range(self.hist_size())]
         self.baskstacksize[pid] = [float("nan") for _ in range(self.hist_size())]
 
@@ -129,6 +133,7 @@ class ETLS2State(ETLState):
       book_data = json.loads(pid_book[pid])
       bid_prices = []
       bid_sizes = []
+      bid_hands = []
       if 'bids' not in book_data:
         logging.info("{} book data for {} missing bids".format(pid, timestamp))
       else:
@@ -143,10 +148,17 @@ class ETLS2State(ETLState):
           except ValueError:
             logging.error("cannot parse bid size: {}".format(book_data['bids'][i][1]))
             bid_sizes.append(float("nan"))
+          try:
+            bid_hands.append(float(book_data['bids'][i][2]))
+          except ValueError:
+            logging.error("cannot parse bid hand: {}".format(book_data['bids'][i][2]))
+            bid_hands.append(float("nan"))
       self.bbidprices[pid][nidx] = bid_prices
       self.bbidsizes[pid][nidx] = bid_sizes
+      self.bbidhands[pid][nidx] = bid_hands
       ask_prices = []
       ask_sizes = []
+      ask_hands = []
       if 'asks' not in book_data:
         logging.info("{} book data for {} missing asks".format(pid, timestamp))
       else:
@@ -161,8 +173,14 @@ class ETLS2State(ETLState):
           except ValueError:
             logging.error("cannot parse ask size: {}".format(book_data['asks'][i][1]))
             ask_sizes.append(float("nan"))
+          try:
+            ask_hands.append(float(book_data['asks'][i][2]))
+          except ValueError:
+            logging.error("cannot parse ask hand: {}".format(book_data['asks'][i][2]))
+            ask_hands.append(float("nan"))
       self.baskprices[pid][nidx] = ask_prices
       self.basksizes[pid][nidx] = ask_sizes
+      self.baskhands[pid][nidx] = ask_hands
       if 'bids' not in book_data:
         self.bbidsstacksize[pid][nidx] = 0
       else:
@@ -373,6 +391,12 @@ class ETLS2State(ETLState):
     data[pid + ":best_ask_size_{}avg".format(k)]     = self.rolling_avg_aoa(self.basksizes[pid], idx, 0, timestamp, k)
     data[pid + ":best_ask_size_{}max".format(k)]     = self.rolling_max_aoa(self.basksizes[pid], idx, 0, timestamp, k)
     data[pid + ":best_ask_size_{}min".format(k)]     = self.rolling_min_aoa(self.basksizes[pid], idx, 0, timestamp, k)
+    data[pid + ":best_bid_hand_{}avg".format(k)]     = self.rolling_avg_aoa(self.bbidhands[pid], idx, 0, timestamp, k)
+    data[pid + ":best_bid_hand_{}max".format(k)]     = self.rolling_max_aoa(self.bbidhands[pid], idx, 0, timestamp, k)
+    data[pid + ":best_bid_hand_{}min".format(k)]     = self.rolling_min_aoa(self.bbidhands[pid], idx, 0, timestamp, k)
+    data[pid + ":best_ask_hand_{}avg".format(k)]     = self.rolling_avg_aoa(self.baskhands[pid], idx, 0, timestamp, k)
+    data[pid + ":best_ask_hand_{}max".format(k)]     = self.rolling_max_aoa(self.baskhands[pid], idx, 0, timestamp, k)
+    data[pid + ":best_ask_hand_{}min".format(k)]     = self.rolling_min_aoa(self.baskhands[pid], idx, 0, timestamp, k)
     data[pid + ":bid_tick1_{}max".format(k)]         = self.rolling_max(self.bbidtick1[pid], idx, timestamp, k)
     data[pid + ":bid_tick1_{}min".format(k)]         = self.rolling_min(self.bbidtick1[pid], idx, timestamp, k)
     data[pid + ":ask_tick1_{}max".format(k)]         = self.rolling_max(self.basktick1[pid], idx, timestamp, k)
@@ -459,6 +483,14 @@ class ETLS2State(ETLState):
         data[pid + ":best_ask_size"] = float("nan")
       else:
         data[pid + ":best_ask_size"] = self.basksizes[pid][idx][0]
+      if len(self.bbidhands[pid][idx]) == 0:
+        data[pid + ":best_bid_hand"] = float("nan")
+      else:
+        data[pid + ":best_bid_hand"] = self.bbidhands[pid][idx][0]
+      if len(self.baskhands[pid][idx]) == 0:
+        data[pid + ":best_ask_hand"] = float("nan")
+      else:
+        data[pid + ":best_ask_hand"] = self.baskhands[pid][idx][0]
       data[pid + ":bid_level_size"] = self.bbidstacksize[pid][idx]
       data[pid + ":ask_level_size"] = self.baskstacksize[pid][idx]
       data[pid + ":bid_tick1"]      = self.bbidtick1[pid][idx]
