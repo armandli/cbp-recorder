@@ -216,58 +216,90 @@ class ETLS1State(ETLState):
       return float("nan")
     return (mrsum / float(count - nan_count)) / (m2sum / float(count - nan_count))
 
-  def produce_output_rolling_k(self, data, pid, idx, timestamp, k):
-    data[pid + ":best_bid_price_{}avg".format(k)] = self.rolling_avg(self.bbprice[pid], idx, timestamp, k)
-    data[pid + ":best_bid_price_{}max".format(k)] = self.rolling_max(self.bbprice[pid], idx, timestamp, k)
-    data[pid + ":best_bid_price_{}min".format(k)] = self.rolling_min(self.bbprice[pid], idx, timestamp, k)
-    data[pid + ":best_ask_price_{}avg".format(k)] = self.rolling_avg(self.baprice[pid], idx, timestamp, k)
-    data[pid + ":best_ask_price_{}max".format(k)] = self.rolling_max(self.baprice[pid], idx, timestamp, k)
-    data[pid + ":best_ask_price_{}min".format(k)] = self.rolling_min(self.baprice[pid], idx, timestamp, k)
-    data[pid + ":best_bid_size_{}avg".format(k)]  = self.rolling_avg(self.bbsize[pid], idx, timestamp, k)
-    data[pid + ":best_bid_size_{}max".format(k)]  = self.rolling_max(self.bbsize[pid], idx, timestamp, k)
-    data[pid + ":best_bid_size_{}min".format(k)]  = self.rolling_min(self.bbsize[pid], idx, timestamp, k)
-    data[pid + ":best_ask_size_{}avg".format(k)]  = self.rolling_avg(self.basize[pid], idx, timestamp, k)
-    data[pid + ":best_ask_size_{}max".format(k)]  = self.rolling_max(self.basize[pid], idx, timestamp, k)
-    data[pid + ":best_ask_size_{}min".format(k)]  = self.rolling_min(self.basize[pid], idx, timestamp, k)
-    data[pid + ":best_bid_hand_{}avg".format(k)]  = self.rolling_avg(self.bbhand[pid], idx, timestamp, k)
-    data[pid + ":best_bid_hand_{}max".format(k)]  = self.rolling_max(self.bbhand[pid], idx, timestamp, k)
-    data[pid + ":best_bid_hand_{}min".format(k)]  = self.rolling_min(self.bbhand[pid], idx, timestamp, k)
-    data[pid + ":best_ask_hand_{}avg".format(k)]  = self.rolling_avg(self.bahand[pid], idx, timestamp, k)
-    data[pid + ":best_ask_hand_{}max".format(k)]  = self.rolling_max(self.bahand[pid], idx, timestamp, k)
-    data[pid + ":best_ask_hand_{}min".format(k)]  = self.rolling_min(self.bahand[pid], idx, timestamp, k)
-    data[pid + ":ba_imbalance_{}avg".format(k)]   = self.rolling_avg(self.bba_imbalance[pid], idx, timestamp, k)
-    data[pid + ":ba_imbalance_{}max".format(k)]   = self.rolling_max(self.bba_imbalance[pid], idx, timestamp, k)
-    data[pid + ":ba_imbalance_{}min".format(k)]   = self.rolling_min(self.bba_imbalance[pid], idx, timestamp, k)
-    data[pid + ":wap_{}avg".format(k)]            = self.rolling_avg(self.waprice[pid], idx, timestamp, k)
-    data[pid + ":wap_{}max".format(k)]            = self.rolling_max(self.waprice[pid], idx, timestamp, k)
-    data[pid + ":wap_{}min".format(k)]            = self.rolling_min(self.waprice[pid], idx, timestamp, k)
-    data[pid + ":book_return_{}avg".format(k)]    = self.rolling_avg(self.breturn[pid], idx, timestamp, k)
-    data[pid + ":book_return_{}max".format(k)]    = self.rolling_max(self.breturn[pid], idx, timestamp, k)
-    data[pid + ":book_return_{}min".format(k)]    = self.rolling_min(self.breturn[pid], idx, timestamp, k)
-    data[pid + ":book_return_{}sum".format(k)]    = self.rolling_sum(self.breturn[pid], idx, timestamp, k)
-    data[pid + ":ba_spread_{}avg".format(k)]      = self.rolling_avg(self.bbaspread[pid], idx, timestamp, k)
-    data[pid + ":ba_spread_{}max".format(k)]      = self.rolling_max(self.bbaspread[pid], idx, timestamp, k)
-    data[pid + ":ba_spread_{}min".format(k)]      = self.rolling_min(self.bbaspread[pid], idx, timestamp, k)
+  def produce_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
+    output = self.rolling_avg_sum_max_min_multi_k(self.bbprice[pid], idx, timestamp, ks)
+    for i, k, in enumerate(ks):
+      data[pid + ":best_bid_price_{}avg".format(k)] = output[i][0]
+      data[pid + ":best_bid_price_{}max".format(k)] = output[i][2]
+      data[pid + ":best_bid_price_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.baprice[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":best_ask_price_{}avg".format(k)] = output[i][0]
+      data[pid + ":best_ask_price_{}max".format(k)] = output[i][2]
+      data[pid + ":best_ask_price_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bbsize[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":best_bid_size_{}avg".format(k)] = output[i][0]
+      data[pid + ":best_bid_size_{}max".format(k)] = output[i][2]
+      data[pid + ":best_bid_size_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.basize[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":best_ask_size_{}avg".format(k)] = output[i][0]
+      data[pid + ":best_ask_size_{}max".format(k)] = output[i][2]
+      data[pid + ":best_ask_size_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bbhand[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":best_bid_hand_{}avg".format(k)] = output[i][0]
+      data[pid + ":best_bid_hand_{}max".format(k)] = output[i][2]
+      data[pid + ":best_bid_hand_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bahand[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":best_ask_hand_{}avg".format(k)] = output[i][0]
+      data[pid + ":best_ask_hand_{}max".format(k)] = output[i][2]
+      data[pid + ":best_ask_hand_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bba_imbalance[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":ba_imbalance_{}avg".format(k)] = output[i][0]
+      data[pid + ":ba_imbalance_{}max".format(k)] = output[i][2]
+      data[pid + ":ba_imbalance_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.waprice[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":wap_{}avg".format(k)] = output[i][0]
+      data[pid + ":wap_{}max".format(k)] = output[i][2]
+      data[pid + ":wap_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.breturn[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":book_return_{}avg".format(k)] = output[i][0]
+      data[pid + ":book_return_{}max".format(k)] = output[i][2]
+      data[pid + ":book_return_{}min".format(k)] = output[i][3]
+      data[pid + ":book_return_{}sum".format(k)] = output[i][1]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bbaspread[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":ba_spread_{}avg".format(k)] = output[i][0]
+      data[pid + ":ba_spread_{}max".format(k)] = output[i][2]
+      data[pid + ":ba_spread_{}min".format(k)] = output[i][3]
 
-    data[pid + ":trade_buys_count_{}sum".format(k)] = self.rolling_sum(self.tnbuys[pid], idx, timestamp, k)
-    data[pid + ":trade_buys_count_{}avg".format(k)] = self.rolling_avg(self.tnbuys[pid], idx, timestamp, k, count_nan=True)
-    data[pid + ":trade_buys_count_{}max".format(k)] = self.rolling_max(self.tnbuys[pid], idx, timestamp, k)
-    data[pid + ":trade_sells_count_{}sum".format(k)] = self.rolling_sum(self.tnsells[pid], idx, timestamp, k)
-    data[pid + ":trade_sells_count_{}avg".format(k)] = self.rolling_avg(self.tnsells[pid], idx, timestamp, k, count_nan=True)
-    data[pid + ":trade_sells_count_{}max".format(k)] = self.rolling_max(self.tnsells[pid], idx, timestamp, k)
-    data[pid + ":trade_size_{}sum".format(k)] = self.rolling_sum(self.tsize[pid], idx, timestamp, k)
-    data[pid + ":trade_size_{}avg".format(k)] = self.rolling_avg(self.tsize[pid], idx, timestamp, k, count_nan=True)
-    data[pid + ":trade_size_{}max".format(k)] = self.rolling_max(self.tsize[pid], idx, timestamp, k)
-    data[pid + ":trade_volume_{}sum".format(k)] = self.rolling_sum(self.tvolume[pid], idx, timestamp, k)
-    data[pid + ":trade_volume_{}avg".format(k)] = self.rolling_avg(self.tvolume[pid], idx, timestamp, k, count_nan=True)
-    data[pid + ":trade_volume_{}max".format(k)] = self.rolling_max(self.tvolume[pid], idx, timestamp, k)
-    data[pid + ":trade_avg_price_{}avg".format(k)] = self.rolling_avg(self.tavgprice[pid], idx, timestamp, k)
-    data[pid + ":trade_avg_price_{}max".format(k)] = self.rolling_max(self.tavgprice[pid], idx, timestamp, k)
-    data[pid + ":trade_avg_price_{}min".format(k)] = self.rolling_min(self.tavgprice[pid], idx, timestamp, k)
-    data[pid + ":trade_return_{}avg".format(k)] = self.rolling_avg(self.treturn[pid], idx, timestamp, k)
-    data[pid + ":trade_return_{}sum".format(k)] = self.rolling_sum(self.treturn[pid], idx, timestamp, k)
-    data[pid + ":trade_return_{}max".format(k)] = self.rolling_max(self.treturn[pid], idx, timestamp, k)
-    data[pid + ":trade_return_{}min".format(k)] = self.rolling_min(self.treturn[pid], idx, timestamp, k)
+    output = self.rolling_avg_sum_max_min_multi_k(self.tnbuys[pid], idx, timestamp, ks, count_nan=True)
+    for i, k in enumerate(ks):
+      data[pid + ":trade_buys_count_{}sum".format(k)] = output[i][1]
+      data[pid + ":trade_buys_count_{}avg".format(k)] = output[i][0]
+      data[pid + ":trade_buys_count_{}max".format(k)] = output[i][2]
+    output = self.rolling_avg_sum_max_min_multi_k(self.tnsells[pid], idx, timestamp, ks, count_nan=True)
+    for i, k in enumerate(ks):
+      data[pid + ":trade_sells_count_{}sum".format(k)] = output[i][1]
+      data[pid + ":trade_sells_count_{}avg".format(k)] = output[i][0]
+      data[pid + ":trade_sells_count_{}max".format(k)] = output[i][2]
+    output = self.rolling_avg_sum_max_min_multi_k(self.tsize[pid], idx, timestamp, ks, count_nan=True)
+    for i, k in enumerate(ks):
+      data[pid + ":trade_size_{}sum".format(k)] = output[i][1]
+      data[pid + ":trade_size_{}avg".format(k)] = output[i][0]
+      data[pid + ":trade_size_{}max".format(k)] = output[i][2]
+    output = self.rolling_avg_sum_max_min_multi_k(self.tvolume[pid], idx, timestamp, ks, count_nan=True)
+    for i, k in enumerate(ks):
+      data[pid + ":trade_volume_{}sum".format(k)] = output[i][1]
+      data[pid + ":trade_volume_{}avg".format(k)] = output[i][0]
+      data[pid + ":trade_volume_{}max".format(k)] = output[i][2]
+    output = self.rolling_avg_sum_max_min_multi_k(self.tavgprice[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":trade_avg_price_{}avg".format(k)] = output[i][0]
+      data[pid + ":trade_avg_price_{}max".format(k)] = output[i][2]
+      data[pid + ":trade_avg_price_{}min".format(k)] = output[i][3]
+    output = self.rolling_avg_sum_max_min_multi_k(self.treturn[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":trade_return_{}avg".format(k)] = output[i][0]
+      data[pid + ":trade_return_{}sum".format(k)] = output[i][1]
+      data[pid + ":trade_return_{}max".format(k)] = output[i][2]
+      data[pid + ":trade_return_{}min".format(k)] = output[i][3]
 
   def produce_output(self, timestamp):
     perf_start_time = time.perf_counter()
@@ -300,30 +332,18 @@ class ETLS1State(ETLState):
       data[pid + ":trade_avg_price"] = self.tavgprice[pid][idx]
       data[pid + ":trade_return"]   = self.treturn[pid][idx]
 
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 3)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 9)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 27)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 81)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 162)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 324)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 648)
-      self.produce_output_rolling_k(data, pid, idx, timestamp, 960)
+      self.produce_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
 
-      data[pid + ":book_volatility_27"] = self.rolling_volatility(self.breturn[pid], idx, timestamp, 27)
-      data[pid + ":book_volatility_81"] = self.rolling_volatility(self.breturn[pid], idx, timestamp, 81)
-      data[pid + ":book_volatility_162"] = self.rolling_volatility(self.breturn[pid], idx, timestamp, 162)
-      data[pid + ":book_volatility_324"] = self.rolling_volatility(self.breturn[pid], idx, timestamp, 324)
-      data[pid + ":book_volatility_648"] = self.rolling_volatility(self.breturn[pid], idx, timestamp, 648)
-      data[pid + ":book_volatility_960"] = self.rolling_volatility(self.breturn[pid], idx, timestamp, 960)
+      ks = [27, 81, 162, 324, 648, 960]
+      output = self.rolling_volatility_multi_k(self.breturn[pid], idx, timestamp, ks)
+      for i, k in enumerate(ks):
+        data[pid + ":book_volatility_{}".format(k)] = output[i]
 
       data[pid + ":book_beta_648"] = self.rolling_beta(self.breturn[pid], idx, timestamp, 648)
 
-      data[pid + ":trade_volatility_27"] = self.rolling_volatility(self.treturn[pid], idx, timestamp, 27)
-      data[pid + ":trade_volatility_81"] = self.rolling_volatility(self.treturn[pid], idx, timestamp, 81)
-      data[pid + ":trade_volatility_162"] = self.rolling_volatility(self.treturn[pid], idx, timestamp, 162)
-      data[pid + ":trade_volatility_324"] = self.rolling_volatility(self.treturn[pid], idx, timestamp, 324)
-      data[pid + ":trade_volatility_648"] = self.rolling_volatility(self.treturn[pid], idx, timestamp, 648)
-      data[pid + ":trade_volatility_960"] = self.rolling_volatility(self.treturn[pid], idx, timestamp, 960)
+      output = self.rolling_volatility_multi_k(self.treturn[pid], idx, timestamp, ks)
+      for i, k in enumerate(ks):
+        data[pid + ":trade_volatility_{}".format(k)] = output[i]
 
     data["book_mean_return_27"] = self.bmreturn27[idx]
     perf_time_taken = time.perf_counter() - perf_start_time
