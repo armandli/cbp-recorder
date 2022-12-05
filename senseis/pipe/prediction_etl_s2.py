@@ -284,69 +284,6 @@ class ETLS2State(ETLState):
     self.bmreturn27[nidx] = self.rolling_mean_return(nidx, timestamp, 27)
     self.nidx = (self.nidx + 1) % self.hist_size()
 
-  def rolling_avg_sum_max_min_aoa_multi_k(self, data, idx, ioidx, timestamp, lengths, nan_count=False):
-    s = 0.
-    s_max = float("-inf")
-    s_min = float("inf")
-    nan_count = 0
-    count = 0
-    length_idx = 0
-    max_length = max(lengths)
-    min_timestamp = timestamp - max_length
-    ret = []
-    for i in range(max_length + 1):
-      if i == lengths[length_idx]:
-        if nan_count:
-          ret.append([s / float(count),             s, s_max, s_min])
-        elif count - nan_count == 0:
-          ret.append([float("nan"),                 s, s_max, s_min])
-        else:
-          ret.append([s / float(count - nan_count), s, s_max, s_min])
-        length_idx += 1
-      if self.timestamps[(idx - i) % self.hist_size()] is None or \
-         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
-         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
-        continue
-      if len(data[(idx - i) % self.hist_size()]) > ioidx and not math.isnan(data[(idx - i) % self.hist_size()][ioidx]):
-        s += data[(idx - i) % self.hist_size()][ioidx]
-        s_max = max(s_max, data[(idx - i) % self.hist_size()][ioidx])
-        s_min = min(s_min, data[(idx - i) % self.hist_size()][ioidx])
-      else:
-        nan_count += 1
-    return ret
-
-  def rolling_abs_avg_sum_max_min_multi_k(self, data, idx, timestamp, lengths, count_nan=False):
-    s = 0.
-    s_max = float("-inf")
-    s_min = float("inf")
-    count = 0
-    nan_count = 0
-    max_length = max(lengths)
-    min_timestamp = timestamp - max_length
-    length_idx = 0
-    ret = []
-    for i in range(max_length + 1):
-      if i == lengths[length_idx]:
-        if count_nan:
-          ret.append([s / float(count),             s, s_max, s_min])
-        elif count - nan_count == 0:
-          ret.append([float("nan"),                 s, s_max, s_min])
-        else:
-          ret.append([s / float(count - nan_count), s, s_max, s_min])
-        length_idx += 1
-      if self.timestamps[(idx - i) % self.hist_size()] is None or \
-         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
-         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
-        continue
-      if not math.isnan(data[(idx - i) % self.hist_size()]):
-        s += abs(data[(idx - i) % self.hist_size()])
-        s_max = max(s, abs(data[(idx - i) % self.hist_size()]))
-        s_min = min(s, abs(data[(idx - i) % self.hist_size()]))
-      else:
-        nan_count += 1
-      count += 1
-    return ret
-
   def rolling_mean_return(self, idx, timestamp, length):
     rs = [self.rolling_sum(self.breturn[pid], idx, timestamp, length) for pid in self.pids]
     s = sum(rs)
@@ -404,14 +341,14 @@ class ETLS2State(ETLState):
       data[pid + ":best_ask_hand_{}avg".format(k)] = output[i][0]
       data[pid + ":best_ask_hand_{}max".format(k)] = output[i][2]
       data[pid + ":best_ask_hand_{}min".format(k)] = output[i][3]
-    output = self.rolling_avg_sum_max_min_multi_k(self.bbidtick1[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":bid_tick1_{}max".format(k)] = output[i][2]
-      data[pid + ":bid_tick1_{}min".format(k)] = output[i][3]
-    output = self.rolling_avg_sum_max_min_multi_k(self.basktick1[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":ask_tick1_{}max".format(k)] = output[i][2]
-      data[pid + ":ask_tick1_{}min".format(k)] = output[i][3]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidtick1[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":bid_tick1_{}max".format(k)] = output[i][2]
+#      data[pid + ":bid_tick1_{}min".format(k)] = output[i][3]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.basktick1[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":ask_tick1_{}max".format(k)] = output[i][2]
+#      data[pid + ":ask_tick1_{}min".format(k)] = output[i][3]
     output = self.rolling_avg_sum_max_min_multi_k(self.bbidavgtick[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":bid_avg_tick_{}max".format(k)] = output[i][2]
@@ -420,16 +357,16 @@ class ETLS2State(ETLState):
     for i, k in enumerate(ks):
       data[pid + ":ask_avg_tick_{}max".format(k)] = output[i][2]
       data[pid + ":ask_avg_tick_{}min".format(k)] = output[i][3]
-    output = self.rolling_abs_avg_sum_max_min_multi_k(self.bbidsizechange[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":bid_size_change_{}max".format(k)] = output[i][2]
-      data[pid + ":bid_size_change_{}max".format(k)] = output[i][3]
-      data[pid + ":bid_size_change_{}absavg".format(k)] = output[i][0]
-    output = self.rolling_abs_avg_sum_max_min_multi_k(self.basksizechange[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":ask_size_change_{}max".format(k)] = output[i][2]
-      data[pid + ":ask_size_change_{}min".format(k)] = output[i][3]
-      data[pid + ":ask_size_change_{}absavg".format(k)] = output[i][0]
+#    output = self.rolling_abs_avg_sum_max_min_multi_k(self.bbidsizechange[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":bid_size_change_{}max".format(k)] = output[i][2]
+#      data[pid + ":bid_size_change_{}max".format(k)] = output[i][3]
+#      data[pid + ":bid_size_change_{}absavg".format(k)] = output[i][0]
+#    output = self.rolling_abs_avg_sum_max_min_multi_k(self.basksizechange[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":ask_size_change_{}max".format(k)] = output[i][2]
+#      data[pid + ":ask_size_change_{}min".format(k)] = output[i][3]
+#      data[pid + ":ask_size_change_{}absavg".format(k)] = output[i][0]
     output = self.rolling_abs_avg_sum_max_min_multi_k(self.bbidvolchange[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":bid_volume_change_{}max".format(k)] = output[i][2]
@@ -440,18 +377,18 @@ class ETLS2State(ETLState):
       data[pid + ":ask_volume_change_{}max".format(k)] = output[i][2]
       data[pid + ":ask_volume_change_{}min".format(k)] = output[i][3]
       data[pid + ":ask_volume_change_{}absavg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
     output = self.rolling_avg_sum_max_min_multi_k(self.bba_imbalance[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":ba_imbalance_{}avg".format(k)] = output[i][0]
@@ -483,11 +420,11 @@ class ETLS2State(ETLState):
       data[pid + ":trade_sells_count_{}sum".format(k)] = output[i][1]
       data[pid + ":trade_sells_count_{}max".format(k)] = output[i][2]
       data[pid + ":trade_sells_count_{}min".format(k)] = output[i][3]
-    output = self.rolling_avg_sum_max_min_multi_k(self.tsize[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":trade_size_{}sum".format(k)] = output[i][1]
-      data[pid + ":trade_size_{}avg".format(k)] = output[i][0]
-      data[pid + ":trade_size_{}max".format(k)] = output[i][2]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.tsize[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":trade_size_{}sum".format(k)] = output[i][1]
+#      data[pid + ":trade_size_{}avg".format(k)] = output[i][0]
+#      data[pid + ":trade_size_{}max".format(k)] = output[i][2]
     output = self.rolling_avg_sum_max_min_multi_k(self.tvolume[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":trade_volume_{}sum".format(k)] = output[i][1]

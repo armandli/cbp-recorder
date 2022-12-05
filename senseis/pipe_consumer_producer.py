@@ -187,6 +187,69 @@ class ETLState(ABC):
       count += 1
     return ret
 
+  def rolling_avg_sum_max_min_aoa_multi_k(self, data, idx, ioidx, timestamp, lengths, nan_count=False):
+    s = 0.
+    s_max = float("-inf")
+    s_min = float("inf")
+    nan_count = 0
+    count = 0
+    length_idx = 0
+    max_length = max(lengths)
+    min_timestamp = timestamp - max_length
+    ret = []
+    for i in range(max_length + 1):
+      if i == lengths[length_idx]:
+        if nan_count:
+          ret.append([s / float(count),             s, s_max, s_min])
+        elif count - nan_count == 0:
+          ret.append([float("nan"),                 s, s_max, s_min])
+        else:
+          ret.append([s / float(count - nan_count), s, s_max, s_min])
+        length_idx += 1
+      if self.timestamps[(idx - i) % self.hist_size()] is None or \
+         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
+         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
+        continue
+      if len(data[(idx - i) % self.hist_size()]) > ioidx and not math.isnan(data[(idx - i) % self.hist_size()][ioidx]):
+        s += data[(idx - i) % self.hist_size()][ioidx]
+        s_max = max(s_max, data[(idx - i) % self.hist_size()][ioidx])
+        s_min = min(s_min, data[(idx - i) % self.hist_size()][ioidx])
+      else:
+        nan_count += 1
+    return ret
+
+  def rolling_abs_avg_sum_max_min_multi_k(self, data, idx, timestamp, lengths, count_nan=False):
+    s = 0.
+    s_max = float("-inf")
+    s_min = float("inf")
+    count = 0
+    nan_count = 0
+    max_length = max(lengths)
+    min_timestamp = timestamp - max_length
+    length_idx = 0
+    ret = []
+    for i in range(max_length + 1):
+      if i == lengths[length_idx]:
+        if count_nan:
+          ret.append([s / float(count),             s, s_max, s_min])
+        elif count - nan_count == 0:
+          ret.append([float("nan"),                 s, s_max, s_min])
+        else:
+          ret.append([s / float(count - nan_count), s, s_max, s_min])
+        length_idx += 1
+      if self.timestamps[(idx - i) % self.hist_size()] is None or \
+         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
+         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
+        continue
+      if not math.isnan(data[(idx - i) % self.hist_size()]):
+        s += abs(data[(idx - i) % self.hist_size()])
+        s_max = max(s, abs(data[(idx - i) % self.hist_size()]))
+        s_min = min(s, abs(data[(idx - i) % self.hist_size()]))
+      else:
+        nan_count += 1
+      count += 1
+    return ret
+
   def rolling_sum(self, data, idx, timestamp, length):
     s = 0.
     min_timestamp = timestamp - length

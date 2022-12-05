@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/home/armandli/cbp-recorder
-ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && book_level2s1_writer --period 360 --exchange book_level2_1 --logfile writer.log'
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && book_level2s1_writer --period 180 --exchange book_level2_1 --logfile writer.log'
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:/home/armandli/cbp-recorder/writer_io.log
 StandardError=inherit
