@@ -377,18 +377,18 @@ class ETLS2State(ETLState):
       data[pid + ":ask_volume_change_{}max".format(k)] = output[i][2]
       data[pid + ":ask_volume_change_{}min".format(k)] = output[i][3]
       data[pid + ":ask_volume_change_{}absavg".format(k)] = output[i][0]
-#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
-#    for i, k in enumerate(ks):
-#      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
-#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
-#    for i, k in enumerate(ks):
-#      data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
-#    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
-#    for i, k in enumerate(ks):
-#      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
-#    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
-#    for i, k in enumerate(ks):
-#      data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
+    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
+    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
+    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
+    for i, k in enumerate(ks):
+      data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
     output = self.rolling_avg_sum_max_min_multi_k(self.bba_imbalance[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":ba_imbalance_{}avg".format(k)] = output[i][0]
