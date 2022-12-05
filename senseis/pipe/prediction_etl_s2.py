@@ -182,7 +182,7 @@ class ETLS2State(ETLState):
       self.basksizes[pid][nidx] = ask_sizes
       self.baskhands[pid][nidx] = ask_hands
       if 'bids' not in book_data:
-        self.bbidsstacksize[pid][nidx] = 0
+        self.bbidstacksize[pid][nidx] = 0
       else:
         try:
           self.bbidstacksize[pid][nidx] = int(book_data['bids'][0])
