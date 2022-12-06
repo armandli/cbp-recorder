@@ -216,7 +216,7 @@ class ETLS1State(ETLState):
       return float("nan")
     return (mrsum / float(count - nan_count)) / (m2sum / float(count - nan_count))
 
-  def produce_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
+  def produce_book_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
     output = self.rolling_avg_sum_max_min_multi_k(self.bbprice[pid], idx, timestamp, ks)
     for i, k, in enumerate(ks):
       data[pid + ":best_bid_price_{}avg".format(k)] = output[i][0]
@@ -269,6 +269,7 @@ class ETLS1State(ETLState):
       data[pid + ":ba_spread_{}max".format(k)] = output[i][2]
       data[pid + ":ba_spread_{}min".format(k)] = output[i][3]
 
+  def produce_trade_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
     output = self.rolling_avg_sum_max_min_multi_k(self.tnbuys[pid], idx, timestamp, ks, count_nan=True)
     for i, k in enumerate(ks):
       data[pid + ":trade_buys_count_{}sum".format(k)] = output[i][1]
@@ -332,7 +333,8 @@ class ETLS1State(ETLState):
       data[pid + ":trade_avg_price"] = self.tavgprice[pid][idx]
       data[pid + ":trade_return"]   = self.treturn[pid][idx]
 
-      self.produce_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
+      self.produce_book_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
+      self.produce_trade_output_rolling_multi_k(data, pid, idx, timestamp, [162, 324, 648, 960])
 
       ks = [27, 81, 162, 324, 648, 960]
       output = self.rolling_volatility_multi_k(self.breturn[pid], idx, timestamp, ks)

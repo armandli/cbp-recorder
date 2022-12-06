@@ -135,7 +135,7 @@ class ETLS2State(ETLState):
       bid_sizes = []
       bid_hands = []
       if 'bids' not in book_data:
-        logging.info("{} book data for {} missing bids".format(pid, timestamp))
+        logging.info("{} book data for {} missing bids. data {}".format(pid, timestamp, book_data))
       else:
         for i in range(1, len(book_data['bids'])):
           try:
@@ -160,7 +160,7 @@ class ETLS2State(ETLState):
       ask_sizes = []
       ask_hands = []
       if 'asks' not in book_data:
-        logging.info("{} book data for {} missing asks".format(pid, timestamp))
+        logging.info("{} book data for {} missing asks. data {}".format(pid, timestamp, book_data))
       else:
         for i in range(1, len(book_data['asks'])):
           try:
@@ -248,6 +248,9 @@ class ETLS2State(ETLState):
       count_sells = 0
       trade_data = json.loads(pid_trade[pid])
       for t in trade_data:
+        if not isinstance(t, dict):
+          logging.info("trade data {} contains non-dictionary".format(trade_data))
+          continue
         trade_epoch = convert_trade_time(t['time']).timestamp()
         if trade_epoch >= timestamp - 1:
           try:
@@ -310,7 +313,7 @@ class ETLS2State(ETLState):
       return float("nan")
     return (mrsum / float(count - nan_count)) / (m2sum / float(count - nan_count))
 
-  def produce_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
+  def produce_book_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
     output = self.rolling_avg_sum_max_min_aoa_multi_k(self.bbidprices[pid], idx, 0, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":best_bid_price_{}avg".format(k)] = output[i][0]
@@ -377,15 +380,15 @@ class ETLS2State(ETLState):
       data[pid + ":ask_volume_change_{}max".format(k)] = output[i][2]
       data[pid + ":ask_volume_change_{}min".format(k)] = output[i][3]
       data[pid + ":ask_volume_change_{}absavg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
     output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
     output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
@@ -410,6 +413,8 @@ class ETLS2State(ETLState):
       data[pid + ":ba_spread_{}max".format(k)] = output[i][2]
       data[pid + ":ba_spread_{}min".format(k)] = output[i][3]
 
+
+  def produce_trade_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
     output = self.rolling_avg_sum_max_min_multi_k(self.tnbuys[pid], idx, timestamp, ks, count_nan=True)
     for i, k in enumerate(ks):
       data[pid + ":trade_buys_count_{}sum".format(k)] = output[i][1]
@@ -505,7 +510,8 @@ class ETLS2State(ETLState):
       data[pid + ":trade_avg_price"] = self.tavgprice[pid][idx]
       data[pid + ":trade_return"]    = self.treturn[pid][idx]
 
-      self.produce_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
+      self.produce_book_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
+      self.produce_trade_output_rolling_multi_k(data, pid, idx, timestamp, [162, 324, 648, 960])
 
       ks = [27, 81, 162, 324, 648, 960]
       output = self.rolling_volatility_multi_k(self.breturn[pid], idx, timestamp, ks)
