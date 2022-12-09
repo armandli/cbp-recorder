@@ -13,10 +13,6 @@ if [[ ! -f "etc/${APP_NAME}.service" ]]; then
   exit 1
 fi
 
-mkdir -p $HOME/.config/systemd/user
-
-cp etc/${APP_NAME}.service $HOME/.config/systemd/user/
-
 systemctl --user stop ${APP_NAME}.service
 systemctl --user enable ${APP_NAME}.service
 systemctl --user start ${APP_NAME}.service
