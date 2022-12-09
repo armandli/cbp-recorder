@@ -169,7 +169,7 @@ class ETLState(ABC):
       if i == lengths[length_idx]:
         if count_nan:
           ret.append([s / float(count),             s, s_max, s_min])
-        elif count - nan_count == 0:
+        elif count - nan_count <= 0:
           ret.append([float("nan"),                 s, s_max, s_min])
         else:
           ret.append([s / float(count - nan_count), s, s_max, s_min])
@@ -216,6 +216,7 @@ class ETLState(ABC):
         s_min = min(s_min, data[(idx - i) % self.hist_size()][ioidx])
       else:
         nan_count += 1
+      count += 1
     return ret
 
   def rolling_abs_avg_sum_max_min_multi_k(self, data, idx, timestamp, lengths, count_nan=False):
