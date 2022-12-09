@@ -21,8 +21,6 @@ setup(
       'pyarrow',
       'numpy',
       'scikit-learn',
-      'boto3',
-      's3fs',
       'prometheus-client',
   ],
   entry_points={

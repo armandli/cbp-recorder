@@ -1,0 +1,26 @@
+#!/bin/sh
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: restart_service <name>"
+  echo "Example: restart_service ticker_exchnae_0_publisher"
+  exit 1
+fi
+
+APP_NAME=$1
+
+if [[ ! -f "etc/${APP_NAME}.service" ]]; then
+  echo "File etc/${APP_NAME}.service does not exist"
+  exit 1
+fi
+
+mkdir -p $HOME/.config/systemd/user
+
+cp etc/${APP_NAME}.service $HOME/.config/systemd/user/
+
+systemctl --user stop ${APP_NAME}.service
+systemctl --user enable ${APP_NAME}.service
+systemctl --user start ${APP_NAME}.service
+systemctl --user status ${APP_NAME}.service
+
+#NOTE: need to enable user with this following, otherwise service may not start until user logged in
+#sudo loginctl enable-linger $USER
