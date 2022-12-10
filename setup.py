@@ -39,6 +39,7 @@ setup(
         'prediction_etl_s1 = senseis.pipe.prediction_etl_s1:main',
         'prediction_etl_s2 = senseis.pipe.prediction_etl_s2:main',
         'candle_backfiller = senseis.backfiller.candle_backfiller:main',
+        'combine_dataset = senseis.training.combine_dataset:main',
         'printer = senseis.subscriber.printer:main',
     ]
   },

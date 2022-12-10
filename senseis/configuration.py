@@ -54,6 +54,7 @@ OUTPATHS = {
 STIME_COLNAME = 'sequence_time'
 RTIME_COLNAME = 'record_time'
 PERIOD_COLNAME = 'periodicity'
+STIME_EPOCH_COLNAME = 'sequence_epoch'
 
 CANDLE_GRANULARITY = 60 # candle by each minute
 CANDLE_SIZE = 300
