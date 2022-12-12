@@ -6,6 +6,7 @@ import pytz
 import zlib
 from functools import partial
 from abc import ABC, abstractmethod
+from socket import error as SocketError
 
 import asyncio
 import aio_pika
@@ -127,6 +128,14 @@ async def etl_consumer_producer(
       await que.join()
     except asyncio.CancelledError as err:
       logging.info("Cancelled Error: {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_counter().inc()
+      push_to_gateway(GETWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    except SocketError as err:
+      logging.info("SocketError: {}".format(err))
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)

@@ -11,6 +11,7 @@ import asyncio
 import aiohttp
 import aio_pika
 import aiobotocore.session as abcsession
+from socket import error as SocketError
 
 from prometheus_client import push_to_gateway
 
@@ -168,6 +169,13 @@ async def extraction_producer_consumer(producer_f, consumer_f, create_message_f,
       logging.info("Restarting")
       get_restarted_counter().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    except SocketError as err:
+      logging.info("SocketError: {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      get_restarted_counter().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 def create_message(periodic_time, time_record, data):
   data[STIME_COLNAME] = periodic_time.strftime(DATETIME_FORMAT)
@@ -186,6 +194,14 @@ async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name
       await que.join()
     except asyncio.CancelledError as err:
       logging.info("CancelledError {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_counter().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    except SocketError as err:
+      logging.info("SocketError: {}".format(err))
       for task in tasks:
         task.cancel()
       await asyncio.gather(*tasks, return_exceptions=True)
