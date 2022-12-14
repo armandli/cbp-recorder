@@ -22,6 +22,7 @@ setup(
       'numpy',
       'scikit-learn',
       'prometheus-client',
+      'jupyter',
   ],
   entry_points={
     'console_scripts':[

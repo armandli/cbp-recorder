@@ -334,16 +334,16 @@ class ETLS2State(ETLState):
       data[pid + ":best_ask_size_{}avg".format(k)] = output[i][0]
       data[pid + ":best_ask_size_{}max".format(k)] = output[i][2]
       data[pid + ":best_ask_size_{}min".format(k)] = output[i][3]
-    output = self.rolling_avg_sum_max_min_aoa_multi_k(self.bbidhands[pid], idx, 0, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":best_bid_hand_{}avg".format(k)] = output[i][0]
-      data[pid + ":best_bid_hand_{}max".format(k)] = output[i][2]
-      data[pid + ":best_bid_hand_{}min".format(k)] = output[i][3]
-    output = self.rolling_avg_sum_max_min_aoa_multi_k(self.baskhands[pid], idx, 0, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":best_ask_hand_{}avg".format(k)] = output[i][0]
-      data[pid + ":best_ask_hand_{}max".format(k)] = output[i][2]
-      data[pid + ":best_ask_hand_{}min".format(k)] = output[i][3]
+#    output = self.rolling_avg_sum_max_min_aoa_multi_k(self.bbidhands[pid], idx, 0, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":best_bid_hand_{}avg".format(k)] = output[i][0]
+#      data[pid + ":best_bid_hand_{}max".format(k)] = output[i][2]
+#      data[pid + ":best_bid_hand_{}min".format(k)] = output[i][3]
+#    output = self.rolling_avg_sum_max_min_aoa_multi_k(self.baskhands[pid], idx, 0, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":best_ask_hand_{}avg".format(k)] = output[i][0]
+#      data[pid + ":best_ask_hand_{}max".format(k)] = output[i][2]
+#      data[pid + ":best_ask_hand_{}min".format(k)] = output[i][3]
 #    output = self.rolling_avg_sum_max_min_multi_k(self.bbidtick1[pid], idx, timestamp, ks)
 #    for i, k in enumerate(ks):
 #      data[pid + ":bid_tick1_{}max".format(k)] = output[i][2]
@@ -383,15 +383,15 @@ class ETLS2State(ETLState):
 #    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelintercept[pid], idx, timestamp, ks)
 #    for i, k in enumerate(ks):
 #      data[pid + ":bid_level_intercept_{}avg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.bbidlevelslope[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":bid_level_slope_{}avg".format(k)] = output[i][0]
 #    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelintercept[pid], idx, timestamp, ks)
 #    for i, k in enumerate(ks):
 #      data[pid + ":ask_level_intercept_{}avg".format(k)] = output[i][0]
-    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
-    for i, k in enumerate(ks):
-      data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
+#    output = self.rolling_avg_sum_max_min_multi_k(self.basklevelslope[pid], idx, timestamp, ks)
+#    for i, k in enumerate(ks):
+#      data[pid + ":ask_level_slope_{}avg".format(k)] = output[i][0]
     output = self.rolling_avg_sum_max_min_multi_k(self.bba_imbalance[pid], idx, timestamp, ks)
     for i, k in enumerate(ks):
       data[pid + ":ba_imbalance_{}avg".format(k)] = output[i][0]
