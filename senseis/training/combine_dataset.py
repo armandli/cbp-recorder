@@ -2,6 +2,8 @@ import logging
 import argparse
 import glob
 import re
+import uuid
+import os
 from datetime import datetime
 import pytz
 import pandas as pd
@@ -9,7 +11,6 @@ import pandas as pd
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME, STIME_EPOCH_COLNAME
 from senseis.utility import setup_logging
-
 
 def build_parser():
   parser = argparse.ArgumentParser(description='parameters')
@@ -37,15 +38,44 @@ def main():
   setup_logging(args)
   files = get_all_files(args.dir, args.file_prefix)
   logging.info("Combining {} files".format(len(files)))
-  if len(files) > 0:
-    logging.info("first filename: {}".format(files[0]))
+  if len(files) == 0:
+    logging.error("No files selected using pattern {} in directory {}".format(args.file_prefix, args.dir))
+    return
+  logging.info("first filename: {}".format(files[0]))
   files_epochs = [get_file_epochs(filename, args.dir, args.file_prefix) for filename in files]
   files_epochs.sort(key = lambda item : item[0])
-  dfs = [pd.read_parquet(file) for _, _, file in files_epochs]
-  data = pd.concat(dfs)
-  data[STIME_EPOCH_COLNAME] = data.apply(lambda row: sequence_epoch(row), axis=1)
-  data.set_index(STIME_EPOCH_COLNAME)
-  data.sort_index(inplace=True)
+
+  df = pd.read_parquet(files_epochs[0][2])
+  columns = df.columns
+  logging.info("number of columns: {}".format(len(columns)))
+
+  ssize = 10
+  files_epochs_groups = [files_epochs[k:k+ssize] for k in range(0, len(files_epochs) - ssize, ssize)]
+  tmpfiles = []
+  for group in files_epochs_groups:
+    dfs = [pd.read_parquet(file) for _, _, file in group]
+    data = pd.concat(dfs)
+    data[STIME_EPOCH_COLNAME] = data.apply(lambda row: sequence_epoch(row), axis=1)
+    data.set_index(STIME_EPOCH_COLNAME)
+    data.sort_index(inplace=True)
+    for column in columns:
+      if data[column].dtypes == 'float64':
+        data[column] = data[column].astype('float16')
+      elif data[column].dtypes == 'int64':
+        data[column] = data[column].astype('int16')
+    tmpfile_name = args.dir + "/" + uuid.uuid4().hex + ".parquet"
+    tmpfiles.append(tmpfile_name)
+    logging.info("write {}".format(tmpfile_name))
+    data.to_parquet(tmpfile_name)
+
+  data = pd.DataFrame(columns=columns)
+  for tmpfile in tmpfiles:
+    logging.info("combine {}".format(tmpfile))
+    df = pd.read_parquet(tmpfile)
+    data = pd.concat([data, df])
+    os.remove(tmpfile)
+
+  logging.info("writing out output file".format(args.output_filename))
   data.to_parquet(args.output_filename)
 
 if __name__ == '__main__':

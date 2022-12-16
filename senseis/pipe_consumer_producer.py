@@ -93,6 +93,11 @@ async def push_incoming_to_queue(que, utc, exchange_name, msg: aio_pika.Incoming
     logging.info("Received from {}".format(exchange_name))
     data = zlib.decompress(msg.body).decode()
     await que.put((exchange_name, data))
+    t = datetime.now(utc)
+    next_sec = t + timedelta(seconds=1)
+    next_sec = next_sec - timedelta(seconds=0, microseconds=nxt_sec.microsecond)
+    delta = next_sec - t
+    await asyncio.sleep(delta.microseconds / MICROSECONDS)
 
 async def data_subscriber(exchange_name, que):
   utc = pytz.timezone("UTC")
