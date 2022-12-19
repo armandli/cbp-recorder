@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 import pytz
 import pandas as pd
+import numpy as np
 
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME, STIME_EPOCH_COLNAME
@@ -17,6 +18,7 @@ def build_parser():
   parser.add_argument('--file-prefix', type=str, help='filenam prefix', required=True)
   parser.add_argument('--dir', type=str, help='data file directory', default='../data')
   parser.add_argument('--output-filename', type=str, help='output filename complete path', required=True)
+  parser.add_argument('--chunk-size', type=int, help='chunking size used during processing', default=16)
   parser.add_argument('--logfile', type=str, help='log filename', required=True)
   return parser
 
@@ -49,34 +51,33 @@ def main():
   columns = df.columns
   logging.info("number of columns: {}".format(len(columns)))
 
-  ssize = 10
+  ssize = args.chunk_size
   files_epochs_groups = [files_epochs[k:k+ssize] for k in range(0, len(files_epochs) - ssize, ssize)]
   tmpfiles = []
-  for group in files_epochs_groups:
+  for i, group in enumerate(files_epochs_groups):
+    logging.info("Process group {} of {}".format(i+1, len(files_epochs_groups)))
     dfs = [pd.read_parquet(file) for _, _, file in group]
     data = pd.concat(dfs)
     data[STIME_EPOCH_COLNAME] = data.apply(lambda row: sequence_epoch(row), axis=1)
     data.set_index(STIME_EPOCH_COLNAME)
     data.sort_index(inplace=True)
     for column in columns:
+      logging.info("Converting Column {}".format(column))
       if data[column].dtypes == 'float64':
-        data[column] = data[column].astype('float16')
+        data[column] = np.array(data[column], dtype=np.float32)
       elif data[column].dtypes == 'int64':
-        data[column] = data[column].astype('int16')
+        data[column] = np.array(data[column], dtype=np.int16)
     tmpfile_name = args.dir + "/" + uuid.uuid4().hex + ".parquet"
     tmpfiles.append(tmpfile_name)
     logging.info("write {}".format(tmpfile_name))
     data.to_parquet(tmpfile_name)
-
-  data = pd.DataFrame(columns=columns)
-  for tmpfile in tmpfiles:
-    logging.info("combine {}".format(tmpfile))
-    df = pd.read_parquet(tmpfile)
-    data = pd.concat([data, df])
-    os.remove(tmpfile)
-
+  logging.info("combining files")
+  datas = [pd.read_parquet(tmpfile) for tmpfile in tmpfiles]
+  data = pd.concat(datas)
   logging.info("writing out output file".format(args.output_filename))
   data.to_parquet(args.output_filename)
+  for tmpfile in tmpfiles:
+    os.remove(tmpfile)
 
 if __name__ == '__main__':
   main()

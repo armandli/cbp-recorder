@@ -52,6 +52,7 @@ class ETLS1State(ETLState):
     self.bba_imbalance = dict()
     self.waprice = dict()
     self.breturn = dict()
+    self.breturn_cache = dict()
     self.bbaspread = dict()
     self.bmreturn27 = [None for _ in range(HIST_SIZE)]
     # trade data
@@ -80,6 +81,7 @@ class ETLS1State(ETLState):
         self.bba_imbalance[pid] = [float("nan") for _ in range(self.hist_size())]
         self.waprice[pid] =       [float("nan") for _ in range(self.hist_size())]
         self.breturn[pid] =       [float("nan") for _ in range(self.hist_size())]
+        self.breturn_cache[pid] = [float("nan") for _ in range(self.hist_size())]
         self.bbaspread[pid] =     [float("nan") for _ in range(self.hist_size())]
         # update trade data
         self.tnbuys[pid] =        [0 for _ in range(self.hist_size())]
@@ -191,8 +193,10 @@ class ETLS1State(ETLState):
     self.nidx = (self.nidx + 1) % self.hist_size()
 
   def rolling_mean_return(self, idx, timestamp, length):
-    rs = [self.rolling_sum(self.breturn[pid], idx, timestamp, length) for pid in self.pids]
-    s = sum(rs)
+    rs = [self.rolling_avg_sum(self.breturn[pid], self.breturn_cache[pid], idx, timestamp, length) for pid in self.pids]
+    for i, pid in enumerate(self.pids):
+      self.breturn_cache[pid][idx] = rs[i][0]
+    s = sum([r[1] for r in rs])
     return s / float(len(self.pids))
 
   def rolling_beta(self, prdata, idx, timestamp, length):
@@ -325,13 +329,6 @@ class ETLS1State(ETLState):
       data[pid + ":wap"]            = self.waprice[pid][idx]
       data[pid + ":book_return"]    = self.breturn[pid][idx]
       data[pid + ":ba_spread"]      = self.bbaspread[pid][idx]
-
-#      data[pid + ":trade_buys_count"] = self.tnbuys[pid][idx]
-#      data[pid + ":trade_sells_count"] = self.tnsells[pid][idx]
-#      data[pid + ":trade_size"]     = self.tsize[pid][idx]
-#      data[pid + ":trade_volume"]   = self.tvolume[pid][idx]
-#      data[pid + ":trade_avg_price"] = self.tavgprice[pid][idx]
-#      data[pid + ":trade_return"]   = self.treturn[pid][idx]
 
       self.produce_book_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
       self.produce_trade_output_rolling_multi_k(data, pid, idx, timestamp, [162, 324, 648, 960])

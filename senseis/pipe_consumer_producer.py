@@ -93,11 +93,8 @@ async def push_incoming_to_queue(que, utc, exchange_name, msg: aio_pika.Incoming
     logging.info("Received from {}".format(exchange_name))
     data = zlib.decompress(msg.body).decode()
     await que.put((exchange_name, data))
-    t = datetime.now(utc)
-    nxt_sec = t + timedelta(seconds=1)
-    nxt_sec = nxt_sec - timedelta(seconds=0, microseconds=nxt_sec.microsecond)
-    delta = nxt_sec - t
-    await asyncio.sleep(delta.microseconds / MICROSECONDS)
+    # yield to consumer queue
+    await asyncio.sleep(10000.0 / MICROSECONDS)
 
 async def data_subscriber(exchange_name, que):
   utc = pytz.timezone("UTC")
@@ -265,17 +262,145 @@ class ETLState(ABC):
       count += 1
     return ret
 
-  def rolling_sum(self, data, idx, timestamp, length):
-    s = 0.
-    min_timestamp = timestamp - length
-    for i in range(length):
-      if self.timestamps[(idx - i) % self.hist_size()] is None or \
-         self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
-         self.timestamps[(idx - i) % self.hist_size()] <= min_timestamp:
-        break
-      if not math.isnan(data[(idx - i) % self.hist_size()]):
-        s += data[(idx - i) % self.hist_size()]
-    return s
+  def rolling_avg_sum(self, data, cache, idx, timestamp, length):
+    val = data[idx] if not math.isnan(data[idx]) else 0.
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if math.isnan(cache[pidx]) or self.timestamps[pidx] is None:
+      return (val, val * length)
+    #TODO: implement binary search on circular sorted array
+    beg_timestamp = timestamp - length
+    bidx = pidx
+    while bidx != idx and self.timestamps[bidx] is not None and self.timestamps[bidx] > beg_timestamp:
+      bidx = (bidx - 1) % self.hist_size()
+    bval = data[bidx] if self.timestamps[bidx] is not None and self.timestamps[bidx] == beg_timestamp and not math.isnan(data[bidx]) else float("nan")
+    if not math.isnan(bval):
+      s = cache[pidx] * length - bval + val
+    else:
+      s = cache[pidx] * (length - 1) + val
+    return (s / length, s)
+
+  def rolling_avg_sum_multi_k(self, data, cache, idx, timestamp, lengths):
+    val = data[idx] if not math.isnan(data[idx]) else 0.
+    ret = {k : (val, val * k) for k in lengths}
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if pidx == idx or self.timestamps[pidx] is None:
+      return ret
+    bidx_start = pidx
+    for k in lengths:
+      if not math.isnan(cache[k][pidx]):
+        beg_timestamp = timestamp - k
+        bidx = bidx_start
+        while bidx != idx and self.timestamps[bidx] is not None and self.timestamps[bidx] > beg_timestamp:
+          bidx = (bidx - 1) % self.hist_size()
+        bidx_start = bidx
+        bval = data[bidx] if self.timestamps[bidx] is not None and self.timestamps[bidx] == beg_timestamp and not math.isnan(data[bidx]) else float("nan")
+        if not math.isnan(bval):
+          s = cache[k][pidx] * k - bval + val
+        else:
+          s = cache[k][pidx] * (k - 1) + val
+        ret[k] = (s / k, s)
+    return ret
+
+  def rolling_abs_avg_sum_multi_k(self, data, cache, idx, timestamp, lengths):
+    val = abs(data[idx]) if not math.isnan(data[idx]) else 0.
+    ret = {k : (val, val * k) for k in lengths}
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if pidx == idx or self.timestamps[pidx] is None:
+      return ret
+    bidx_start = pidx
+    for k in lengths:
+      if not math.isnan(cache[k][pidx]):
+        beg_timestamp = timestamp - k
+        bidx = bidx_start
+        while bidx != idx and self.timestamps[bidx] is not None and self.timestamps[bidx] > beg_timestamp:
+          bidx = (bidx - 1) % self.hist_size()
+        bidx_start = bidx
+        bval = abs(data[bidx]) if self.timestamps[bidx] is not None and self.timestamps[bidx] == beg_timestamp and not math.isnan(data[bidx]) else float("nan")
+        if not math.isnan(bval):
+          s = cache[k][pidx] * k - bval + val
+        else:
+          s = cache[k][pidx] * (k - 1) + val
+        ret[k] = (s / k, s)
+    return ret
+
+  def rolling_avg_sum_aoa_multi_k(self, data, cache, idx, ioidx, timestamp, lengths):
+    val = data[idx][ioidx] if not math.isnan(data[idx][ioidx]) else 0.
+    ret = {k : (val, val * k) for k in lengths}
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if pidx == idx or self.timestamps[pidx] is None:
+      return ret
+    bidx_start = pidx
+    for k in lengths:
+      if not math.isnan(cache[k][pidx]):
+        beg_timestamp = timestamp - k
+        bidx = bidx_start
+        while bidx != idx and self.timestamps[bidx] is not None and self.timestamps[bidx] > beg_timestamp:
+          bidx = (bidx - 1) % self.hist_size()
+        bidx_start = bidx
+        bval = data[bidx][ioidx] if self.timestamps[bidx] is not None and self.timestamps[bidx] == beg_timestamp and not math.isnan(data[bidx][ioidx]) else 0.
+        if not math.isnan(bval):
+          s = cache[k][pidx] * k - bval + val
+        else:
+          s = cache[k][pidx] * (k - 1) + val
+        ret[k] = (s / k, s)
+    return ret
+
+  def rolling_ema_ems_multi_k(self, data, cache, idx, timestamp, lengths):
+    val = data[idx] if not math.isnan(data[idx]) else 0.
+    ret = {k : (val, val * k) for k in lengths}
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if pidx == idx or self.timestamps[pidx] is None:
+      return ret
+    for k in lengths:
+      if not math.isnan(cache[k][pidx]):
+        ema = (1. / k) * val + (1. - (1. - k)) * cache[k][pidx]
+        ret[k] = (ema, ema * k)
+    return ret
+
+  def rolling_ema_ems_aoa_multi_k(self, data, cache, idx, ioidx, timestamp, lengths):
+    val = data[idx][ioidx] if not math.isnan(data[idx][ioidx]) else 0.
+    ret = {k : (val, val * k) for k in lengths}
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if pidx == idx or self.timestamps[pidx] is None:
+      return ret
+    for k in lengths:
+      if not math.isnan(cache[k][pidx]):
+        ema = (1. / k) * val + (1. - (1. - k)) * cache[k][pidx]
+        ret[k] = (ema, ema * k)
+    return ret
+
+  def rolling_abs_ema_ems_multi_k(self, data, cache, idx, timestamp, legnths):
+    val = abs(data[idx]) if not math.isnan(data[idx]) else 0.
+    ret = {k : (val, val * k) for k in lengths}
+    prev_timestamp = timestamp - 1
+    pidx = (idx - 1) % self.hist_size()
+    while pidx != idx and self.timestamps[pidx] is not None and self.timestamps[pidx] > prev_timestamp:
+      pidx = (pidx - 1) % self.hist_size()
+    if pidx == idx or self.timestamps[pidx] is None:
+      return ret
+    for k in lengths:
+      if not math.isnan(cache[k][pidx]):
+        ema = (1. / k) * val + (1. - (1. - k)) * cache[k][pidx]
+        ret[k] = (ema, ema * k)
+    return ret
 
   def rolling_volatility_multi_k(self, data, idx, timestamp, lengths):
     s = 0.
@@ -292,5 +417,6 @@ class ETLState(ABC):
         continue
       if not math.isnan(data[(idx - i) % self.hist_size()]):
         s += data[(idx - i) % self.hist_size()] ** 2
+    #TODO: volatility may still not be right
     return [math.sqrt(r) for r in ret]
 
