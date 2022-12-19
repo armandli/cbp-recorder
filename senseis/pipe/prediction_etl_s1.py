@@ -24,7 +24,7 @@ from senseis.metric_utility import setup_gateway, get_collector_registry, get_jo
 from senseis.metric_utility import get_live_gauge
 from senseis.metric_utility import create_etl_process_time_histogram, get_etl_process_time_histogram
 
-HIST_SIZE = 960
+HIST_SIZE = 5832
 
 def build_parser():
   parser = argparse.ArgumentParser(description="parameters")
@@ -40,6 +40,9 @@ def build_parser():
 class ETLS1State(ETLState):
   def __init__(self):
     self.timestamps = [None for _ in range(HIST_SIZE)]
+    self.book_lengths = [9, 27, 81, 243, 729, 1458, 2916, 5832]
+    self.trade_lengths = [243, 729, 1458, 2916, 5832]
+    self.return_lengths = [27, 81, 243, 729, 1458, 2916, 5832]
     self.utc = pytz.timezone("UTC")
     self.pids = []
     # book data
@@ -330,18 +333,17 @@ class ETLS1State(ETLState):
       data[pid + ":book_return"]    = self.breturn[pid][idx]
       data[pid + ":ba_spread"]      = self.bbaspread[pid][idx]
 
-      self.produce_book_output_rolling_multi_k(data, pid, idx, timestamp, [3, 9, 27, 81, 162, 324, 648, 960])
-      self.produce_trade_output_rolling_multi_k(data, pid, idx, timestamp, [162, 324, 648, 960])
+      self.produce_book_output_rolling_multi_k(data, pid, idx, timestamp, self.book_lengths)
+      self.produce_trade_output_rolling_multi_k(data, pid, idx, timestamp, self.trade_lengths)
 
-      ks = [27, 81, 162, 324, 648, 960]
-      output = self.rolling_volatility_multi_k(self.breturn[pid], idx, timestamp, ks)
-      for i, k in enumerate(ks):
+      output = self.rolling_volatility_multi_k(self.breturn[pid], idx, timestamp, self.return_lengths)
+      for i, k in enumerate(self.return_lengths):
         data[pid + ":book_volatility_{}".format(k)] = output[i]
 
       data[pid + ":book_beta_648"] = self.rolling_beta(self.breturn[pid], idx, timestamp, 648)
 
-      output = self.rolling_volatility_multi_k(self.treturn[pid], idx, timestamp, ks)
-      for i, k in enumerate(ks):
+      output = self.rolling_volatility_multi_k(self.treturn[pid], idx, timestamp, self.return_lengths)
+      for i, k in enumerate(self.return_lengths):
         data[pid + ":trade_volatility_{}".format(k)] = output[i]
 
     data["book_mean_return_27"] = self.bmreturn27[idx]
