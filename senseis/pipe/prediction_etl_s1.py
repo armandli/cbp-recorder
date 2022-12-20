@@ -24,7 +24,7 @@ from senseis.metric_utility import setup_gateway, get_collector_registry, get_jo
 from senseis.metric_utility import get_live_gauge
 from senseis.metric_utility import create_etl_process_time_histogram, get_etl_process_time_histogram
 
-HIST_SIZE = 5832
+HIST_SIZE = 1920
 
 def build_parser():
   parser = argparse.ArgumentParser(description="parameters")
@@ -40,9 +40,9 @@ def build_parser():
 class ETLS1State(ETLState):
   def __init__(self):
     self.timestamps = [None for _ in range(HIST_SIZE)]
-    self.book_lengths = [9, 27, 81, 243, 729, 1458, 2916, 5832]
-    self.trade_lengths = [243, 729, 1458, 2916, 5832]
-    self.return_lengths = [27, 81, 243, 729, 1458, 2916, 5832]
+    self.book_lengths = [3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920]
+    self.trade_lengths = [162, 324, 648, 960, 1440, 1920]
+    self.return_lengths = [27, 81, 162, 324, 648, 960, 1440, 1920]
     self.utc = pytz.timezone("UTC")
     self.pids = []
     # book data
