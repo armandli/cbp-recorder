@@ -38,12 +38,15 @@ constexpr char DATETIME_FORMAT[] = "%Y-%m-%dT%H:%M:%S %Z";
 constexpr char OUTPUT_DATETIME_FORMAT[] = "%Y-%m-%dT%H:%M:%S.000000 %Z"; //TODO: hack, because we only print epoch in seconds, this is okay
 
 j::ondemand::parser json_parser;
+//TODO: move format buffer here
 
 using FVectorHist = s::array<s::vector<double>, HIST_SIZE>;
 using IVectorHist = s::array<s::vector<uint64>, HIST_SIZE>;
 using FValueHist  = s::array<double, HIST_SIZE>;
 using IValueHist  = s::array<uint64, HIST_SIZE>;
 using SimpleJsonType = s::variant<s::string,double,int64_t,uint64_t,bool,s::nullptr_t>;
+
+//TODO: report error to stderr. not stdout
 
 uint64 next_idx(uint64 idx){
   idx = idx + 1 < HIST_SIZE ? idx + 1 : 0;
@@ -290,7 +293,11 @@ double compute_bidask_spread(double bid_price, double ask_price){
   else                                     return (ask_price - bid_price) / ask_price;
 }
 
-struct PidHistData {
+struct PidHistDataS1 {
+  //TODO
+};
+
+struct PidHistDataS2 {
   // book data
   FVectorHist mBookBidPrices;
   FVectorHist mBookAskPrices;
@@ -326,7 +333,44 @@ struct PidHistData {
   FValueHist  mTradeReturn;
 };
 
-struct ETLS2State{
+struct ETLS1State {
+  ETLS1State(): mNxtIdx(0) {
+    mBookLengths = {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
+    mTradeLengths = {162, 324, 648, 960, 1440, 1920};
+    //TODO: need to review this these lengths are appropriate
+    mReturnLengths = {27, 81, 162, 324, 648, 960, 1440, 1920};
+  }
+
+  uint64 hist_size() const {
+    return HIST_SIZE;
+  }
+
+  void set_pids(s::vector<s::string>& pids){
+    mPids = pids;
+    for (s::string& pid : pids)
+      mPidDataMap[pid] = PidHistDataS1();
+  }
+
+  void insert(uint64 timestamp, const s::map<s::string, s::string>& pid_book, const s::map<s::string, s::string>& pid_trade){
+    //TODO
+  }
+
+  s::unordered_map<s::string, SimpleJsonType> produce_output(uint64 timestamp){
+    //TODO
+  }
+protected:
+private:
+  s::vector<uint64>                          mBookLengths;
+  s::vector<uint64>                          mTradeLengths;
+  s::vector<uint64>                          mReturnLengths;
+  s::array<uint64, HIST_SIZE>                mTimestamps;
+  s::vector<s::string>                       mPids;
+  s::unordered_map<s::string, PidHistDataS1> mPidDataMap;
+  s::array<double, HIST_SIZE>                mBookMeanReturn27;
+  uint64                                     mNxtIdx;
+};
+
+struct ETLS2State {
   ETLS2State(): mNxtIdx(0) {
     mBookLengths = {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
     mTradeLengths = {162, 324, 648, 960, 1440, 1920};
@@ -341,14 +385,14 @@ struct ETLS2State{
   void set_pids(s::vector<s::string>& pids){
     mPids = pids;
     for (s::string& pid : pids)
-      mPidDataMap[pid] = PidHistData();
+      mPidDataMap[pid] = PidHistDataS2();
   }
 
   void insert(uint64 timestamp, const s::map<s::string, s::string>& pid_book, const s::map<s::string, s::string>& pid_trade){
     uint64 pidx = prev_idx(mNxtIdx);
     mTimestamps[mNxtIdx] = timestamp;
     for (const s::string& pid : mPids){
-      PidHistData& pid_data = mPidDataMap[pid];
+      PidHistDataS2& pid_data = mPidDataMap[pid];
 
       // process book
       do {
@@ -604,7 +648,7 @@ struct ETLS2State{
         break;
     if (idx >= HIST_SIZE) return data;
     for (const s::string& pid : mPids){
-      PidHistData& pid_data = mPidDataMap[pid];
+      PidHistDataS2& pid_data = mPidDataMap[pid];
 
       if (pid_data.mBookBidPrices[idx].size() > 0) data[field_name(pid, "best_bid_price")] = pid_data.mBookBidPrices[idx][0];
       else                                         data[field_name(pid, "best_bid_price")] = FNAN;
@@ -658,7 +702,7 @@ struct ETLS2State{
 
 protected:
   void produce_book_output_rolling_multi_k(s::unordered_map<s::string, SimpleJsonType>& data, const s::string& pid, uint64 idx, uint64 timestamp){
-    PidHistData& pid_data = mPidDataMap[pid];
+    PidHistDataS2& pid_data = mPidDataMap[pid];
     {
       s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_aoa_multi_k(pid_data.mBookBidPrices, idx, 0, timestamp, mBookLengths);
       for (uint64 i = 0; i < mBookLengths.size(); ++i){
@@ -808,7 +852,7 @@ protected:
   }
 
   void produce_trade_output_rolling_multi_k(s::unordered_map<s::string, SimpleJsonType>& data, const s::string& pid, uint64 idx, uint64 timestamp){
-    PidHistData& pid_data = mPidDataMap[pid];
+    PidHistDataS2& pid_data = mPidDataMap[pid];
     {
       s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeNBuys, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i)
@@ -991,7 +1035,7 @@ protected:
   double rolling_mean_return(uint64 idx, uint64 timestamp, uint64 length){
     double sum = 0.;
     for (const s::string& pid : mPids){
-      PidHistData& pid_data = mPidDataMap[pid];
+      PidHistDataS2& pid_data = mPidDataMap[pid];
       s::array<double, 2> as = rolling_avg_sum(pid_data.mBookReturn, idx, timestamp, length);
       sum += as[1];
     }
@@ -1041,14 +1085,14 @@ protected:
   }
 
 private:
-  s::vector<uint64>                        mBookLengths;
-  s::vector<uint64>                        mTradeLengths;
-  s::vector<uint64>                        mReturnLengths;
-  s::array<uint64, HIST_SIZE>              mTimestamps;
-  s::vector<s::string>                     mPids;
-  s::unordered_map<s::string, PidHistData> mPidDataMap;
-  s::array<double, HIST_SIZE>              mBookMeanReturn27;
-  uint64                                   mNxtIdx;
+  s::vector<uint64>                          mBookLengths;
+  s::vector<uint64>                          mTradeLengths;
+  s::vector<uint64>                          mReturnLengths;
+  s::array<uint64, HIST_SIZE>                mTimestamps;
+  s::vector<s::string>                       mPids;
+  s::unordered_map<s::string, PidHistDataS2> mPidDataMap;
+  s::array<double, HIST_SIZE>                mBookMeanReturn27;
+  uint64                                     mNxtIdx;
 };
 
 PYBIND11_MODULE(cppext, m){
@@ -1060,6 +1104,14 @@ PYBIND11_MODULE(cppext, m){
       .. autosummary::
          :tctree: _generate
   )pbdoc";
+
+  py::class_<ETLS1State>(m, "ETLS1State")
+    .def(py::init<>())
+    .def("hist_size", &ETLS1State::hist_size)
+    .def("set_pids", &ETLS1State::set_pids)
+    .def("insert", &ETLS1State::insert)
+    .def("produce_output", &ETLS1State::produce_output)
+    ;
 
   py::class_<ETLS2State>(m, "ETLS2State")
     .def(py::init<>())
