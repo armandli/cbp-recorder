@@ -1,8 +1,21 @@
+from glob import glob
 from setuptools import setup, find_packages
+from pybind11.setup_helpers import Pybind11Extension, build_ext, ParallelCompile, naive_recompile
+
+ParallelCompile("NPY_NUM_BUILD_JOBS", needs_recompile=naive_recompile).install()
+
+__version__ = '0.0.1'
+
+ext_modules = [
+    Pybind11Extension(
+        "cppext",
+        sorted(glob("src/*.cpp")) + sorted(glob("src/*.cc")),
+    ),
+]
 
 setup(
   name='senseis',
-  version='0.0.1',
+  version=__version__,
   description='Coinbase Pro Data Recorder',
   author='senseis',
   author_email='senseisworkspace@gmail.com',
@@ -16,12 +29,13 @@ setup(
       'aio-pika',
       'aiohttp',
       'aiobotocore',
-      's3cmd',
       'pandas',
       'pyarrow',
       'numpy',
+      'pybind11',
       'scikit-learn',
       'prometheus-client',
+      's3cmd',
       'jupyter',
   ],
   entry_points={
@@ -44,5 +58,8 @@ setup(
         'printer = senseis.subscriber.printer:main',
     ]
   },
-  scripts=[]
+  scripts=[],
+  cmdclass={"build_ext": build_ext},
+  ext_modules=ext_modules,
+  zip_safe=False,
 )

@@ -113,7 +113,6 @@ async def candle_writer(pids, exchange_name, start_date, end_date, s3bucket, s3o
     time_begin = int(utc.localize(the_date).timestamp())
     time_end = int(utc.localize(the_date + timedelta(days=1)).timestamp())
     day_data = dict()
-    logging.info("gothere {} {}".format(time_begin, time_end))
     for stime, data in records.items():
       if stime + CANDLE_GRANULARITY * CANDLE_SIZE >= time_begin and stime < time_end:
         day_data[stime] = data

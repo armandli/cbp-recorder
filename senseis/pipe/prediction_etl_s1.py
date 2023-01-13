@@ -22,7 +22,7 @@ from senseis.pipe_consumer_producer import ETLState
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
 from senseis.metric_utility import get_live_gauge
-from senseis.metric_utility import create_etl_process_time_histogram, get_etl_process_time_histogram
+from senseis.metric_utility import create_etl_process_time_histogram
 
 HIST_SIZE = 1920
 
@@ -310,7 +310,6 @@ class ETLS1State(ETLState):
       data[pid + ":trade_return_{}min".format(k)] = output[i][3]
 
   def produce_output(self, timestamp):
-    perf_start_time = time.perf_counter()
     idx = -1
     for i in range(len(self.timestamps)):
       if self.timestamps[i] == timestamp:
@@ -347,9 +346,6 @@ class ETLS1State(ETLState):
         data[pid + ":trade_volatility_{}".format(k)] = output[i]
 
     data["book_mean_return_27"] = self.bmreturn27[idx]
-    perf_time_taken = time.perf_counter() - perf_start_time
-    get_etl_process_time_histogram().observe(perf_time_taken)
-    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     return data
 
 def create_state():

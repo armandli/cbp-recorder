@@ -235,6 +235,7 @@ async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, per
   while True:
     msg = await que.get()
     dat = json.loads(msg)
+    #TODO: this could fail if second does not have fraction, need to handle this for stability
     cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
     epoch_interval = get_interval(cur_epoch)
     get_interval_gauge().set(epoch_interval)

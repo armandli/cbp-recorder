@@ -9,6 +9,8 @@ import asyncio
 
 from prometheus_client import push_to_gateway
 
+import cppext as m
+
 from senseis.utility import setup_logging
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME
@@ -26,7 +28,7 @@ from senseis.pipe_consumer_producer import ETLState
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import setup_gateway, get_collector_registry, get_job_name, setup_basic_gauges
 from senseis.metric_utility import get_live_gauge
-from senseis.metric_utility import create_etl_process_time_histogram, get_etl_process_time_histogram
+from senseis.metric_utility import create_etl_process_time_histogram
 
 def build_parser():
   parser = argparse.ArgumentParser(description="parameters")
@@ -100,6 +102,7 @@ class ETLS2State(ETLState):
     self.tvolume_cache = dict()
     self.tavgprice = dict()
     self.treturn = dict()
+
     self.nidx = 0
 
   def hist_size(self):
@@ -375,32 +378,32 @@ class ETLS2State(ETLState):
       data[pid + ":best_ask_size_{}max".format(k)] = output[i][2]
       data[pid + ":best_ask_size_{}min".format(k)] = output[i][3]
 
-    output = self.rolling_avg_sum_aoa_multi_k(self.bbidhands[pid], self.bbidhands_cache[pid], idx, 0, timestamp, ks)
+    output = self.rolling_ema_ems_aoa_multi_k(self.bbidhands[pid], self.bbidhands_cache[pid], idx, 0, timestamp, ks)
     for k in ks:
       data[pid + ":best_bid_hand_{}avg".format(k)] = output[k][0]
       self.bbidhands_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_avg_sum_aoa_multi_k(self.baskhands[pid], self.baskhands_cache[pid], idx, 0, timestamp, ks)
+    output = self.rolling_ema_ems_aoa_multi_k(self.baskhands[pid], self.baskhands_cache[pid], idx, 0, timestamp, ks)
     for k in ks:
       data[pid + ":best_ask_hand_{}avg".format(k)] = output[k][0]
       self.baskhands_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_avg_sum_multi_k(self.bbidtick1[pid], self.bbidtick1_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.bbidtick1[pid], self.bbidtick1_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":bid_tick1_{}avg".format(k)] = output[k][0]
       self.bbidtick1_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_avg_sum_multi_k(self.basktick1[pid], self.basktick1_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.basktick1[pid], self.basktick1_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":ask_tick1_{}avg".format(k)] = output[k][0]
       self.basktick1_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_avg_sum_multi_k(self.bbidavgtick[pid], self.bbidavgtick_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.bbidavgtick[pid], self.bbidavgtick_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":bid_avg_tick_{}avg".format(k)] = output[k][0]
       self.bbidavgtick_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_avg_sum_multi_k(self.baskavgtick[pid], self.baskavgtick_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.baskavgtick[pid], self.baskavgtick_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":ask_avg_tick_{}avg".format(k)] = output[k][0]
       self.baskavgtick_cache[pid][k][idx] = output[k][0]
@@ -417,12 +420,12 @@ class ETLS2State(ETLState):
       data[pid + ":ask_size_change_{}min".format(k)] = output[i][3]
       data[pid + ":ask_size_change_{}absavg".format(k)] = output[i][0]
 
-    output = self.rolling_abs_avg_sum_multi_k(self.bbidvolchange[pid], self.bbidvolchange_cache[pid], idx, timestamp, ks)
+    output = self.rolling_abs_ema_ems_multi_k(self.bbidvolchange[pid], self.bbidvolchange_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":bid_volume_change_{}absavg".format(k)] = output[k][0]
       self.bbidvolchange_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_abs_avg_sum_multi_k(self.baskvolchange[pid], self.baskvolchange_cache[pid], idx, timestamp, ks)
+    output = self.rolling_abs_ema_ems_multi_k(self.baskvolchange[pid], self.baskvolchange_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":ask_volume_change_{}absavg".format(k)] = output[k][0]
       self.baskvolchange_cache[pid][k][idx] = output[k][0]
@@ -472,12 +475,12 @@ class ETLS2State(ETLState):
       data[pid + ":ba_spread_{}min".format(k)] = output[i][3]
 
   def produce_trade_output_rolling_multi_k(self, data, pid, idx, timestamp, ks):
-    output = self.rolling_avg_sum_multi_k(self.tnbuys[pid], self.tnbuys_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.tnbuys[pid], self.tnbuys_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":trade_buys_count_{}sum".format(k)] = output[k][1]
       self.tnbuys_cache[pid][k][idx] = output[k][0]
 
-    output = self.rolling_avg_sum_multi_k(self.tnsells[pid], self.tnsells_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.tnsells[pid], self.tnsells_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":trade_sells_count_{}sum".format(k)] = output[k][1]
       self.tnsells_cache[pid][k][idx] = output[k][0]
@@ -488,7 +491,7 @@ class ETLS2State(ETLState):
       data[pid + ":trade_size_{}avg".format(k)] = output[i][0]
       data[pid + ":trade_size_{}max".format(k)] = output[i][2]
 
-    output = self.rolling_avg_sum_multi_k(self.tvolume[pid], self.tvolume_cache[pid], idx, timestamp, ks)
+    output = self.rolling_ema_ems_multi_k(self.tvolume[pid], self.tvolume_cache[pid], idx, timestamp, ks)
     for k in ks:
       data[pid + ":trade_volume_{}sum".format(k)] = output[k][1]
       self.tvolume_cache[pid][k][idx] = output[k][0]
@@ -507,7 +510,6 @@ class ETLS2State(ETLState):
       data[pid + ":trade_return_{}min".format(k)] = output[i][3]
 
   def produce_output(self, timestamp):
-    perf_start_time = time.perf_counter()
     idx = -1
     for i in range(len(self.timestamps)):
       if self.timestamps[i] == timestamp:
@@ -576,13 +578,10 @@ class ETLS2State(ETLState):
         data[pid + ":trade_volatility_{}".format(k)] = output[i]
 
     data["book_mean_return_27"] = self.bmreturn27[idx]
-    perf_time_taken = time.perf_counter() - perf_start_time
-    get_etl_process_time_histogram().observe(perf_time_taken)
-    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     return data
 
 def create_state():
-  return ETLS2State()
+  return m.ETLS2State()
 
 def get_history_size():
   return HIST_SIZE

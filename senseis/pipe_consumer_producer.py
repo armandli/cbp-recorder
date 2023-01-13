@@ -1,4 +1,5 @@
 import logging
+import time
 import json
 import math
 from datetime import datetime, timedelta
@@ -23,7 +24,7 @@ from senseis.extraction_producer_consumer import get_period, is_all_found
 from senseis.extraction_producer_consumer import get_interval
 from senseis.metric_utility import GATEWAY_URL
 from senseis.metric_utility import get_collector_registry, get_job_name
-from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_gauge
+from senseis.metric_utility import get_live_gauge, get_restarted_counter, get_interval_gauge, get_etl_process_time_histogram
 
 def process_etl_data(period, data, state):
   book_data = dict()
@@ -36,12 +37,21 @@ def process_etl_data(period, data, state):
       trade_data.update(dat)
     else:
       logging.info("Unexpected data type from exchange {}, neither book nor trade".format(exchange))
+
+  #TODO: determine where is the start and sto
+  perf_start_time = time.perf_counter()
+
   logging.info("Inserting period {} data into state".format(period))
   state.insert(period, book_data, trade_data)
   logging.info("Producing ETL output data from state")
   output = state.produce_output(period)
   logging.info("Output production complete")
   message = json.dumps(output)
+
+  perf_time_taken = time.perf_counter() - perf_start_time
+  get_etl_process_time_histogram().observe(perf_time_taken)
+  push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+
   return zlib.compress(message.encode())
 
 async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que):
@@ -135,7 +145,7 @@ async def etl_consumer_producer(
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
       get_restarted_counter().inc()
-      push_to_gateway(GETWAY_URL, job=get_job_name(), registry=get_collector_registry())
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
     except SocketError as err:
       logging.info("SocketError: {}".format(err))
       for task in tasks:
@@ -143,7 +153,7 @@ async def etl_consumer_producer(
       await asyncio.gather(*tasks, return_exceptions=True)
       logging.info("Restarting")
       get_restarted_counter().inc()
-      push_to_gateway(GETWAY_URL, job=get_job_name(), registry=get_collector_registry())
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 class ETLState(ABC):
   def __init__(self):
@@ -387,7 +397,7 @@ class ETLState(ABC):
         ret[k] = (ema, ema * k)
     return ret
 
-  def rolling_abs_ema_ems_multi_k(self, data, cache, idx, timestamp, legnths):
+  def rolling_abs_ema_ems_multi_k(self, data, cache, idx, timestamp, lengths):
     val = abs(data[idx]) if not math.isnan(data[idx]) else 0.
     ret = {k : (val, val * k) for k in lengths}
     prev_timestamp = timestamp - 1
