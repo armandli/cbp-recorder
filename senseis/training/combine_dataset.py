@@ -17,8 +17,9 @@ def build_parser():
   parser = argparse.ArgumentParser(description='parameters')
   parser.add_argument('--file-prefix', type=str, help='filenam prefix', required=True)
   parser.add_argument('--dir', type=str, help='data file directory', default='../data')
-  parser.add_argument('--output-filename', type=str, help='output filename complete path', required=True)
+  parser.add_argument('--output-filename-prefix', type=str, help='output filename path prefix', required=True)
   parser.add_argument('--chunk-size', type=int, help='chunking size used during processing', default=16)
+  parser.add_argument('--max-groups', type=int, help='maximum number of groups', default=22)
   parser.add_argument('--logfile', type=str, help='log filename', required=True)
   return parser
 
@@ -52,7 +53,11 @@ def main():
   logging.info("number of columns: {}".format(len(columns)))
 
   ssize = args.chunk_size
-  files_epochs_groups = [files_epochs[k:k+ssize] for k in range(0, len(files_epochs) - ssize, ssize)]
+  files_epochs_groups = [files_epochs[k:k+ssize] for k in range(0, len(files_epochs), ssize)]
+  # filter if there are too many groups to be handled in one go
+  files_epochs_groups = files_epochs_groups[:args.max_groups]
+  start_epoch = files_epochs_groups[0][0][0]
+  end_epoch   = files_epochs_groups[-1][-1][1]
   tmpfiles = []
   for i, group in enumerate(files_epochs_groups):
     logging.info("Process group {} of {}".format(i+1, len(files_epochs_groups)))
@@ -72,10 +77,14 @@ def main():
     logging.info("write {}".format(tmpfile_name))
     data.to_parquet(tmpfile_name)
   logging.info("combining files")
-  datas = [pd.read_parquet(tmpfile) for tmpfile in tmpfiles]
-  data = pd.concat(datas)
-  logging.info("writing out output file".format(args.output_filename))
-  data.to_parquet(args.output_filename)
+  data = pd.DataFrame(columns=columns)
+  for tmpfile in tmpfiles:
+    df = pd.read_parquet(tmpfile)
+    data = pd.concat([data, df])
+  output_filename = "{}_{}_{}.parquet".format(args.output_filename_prefix, start_epoch, end_epoch)
+  logging.info("writing out output file".format(output_filename))
+  data.to_parquet(output_filename)
+  logging.info("Cleaning up tempfiles")
   for tmpfile in tmpfiles:
     os.remove(tmpfile)
 

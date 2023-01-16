@@ -9,6 +9,8 @@ import asyncio
 
 from prometheus_client import push_to_gateway
 
+import cppext as m
+
 from senseis.utility import setup_logging
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME
@@ -349,7 +351,7 @@ class ETLS1State(ETLState):
     return data
 
 def create_state():
-  return ETLS1State()
+  return m.ETLS1State()
 
 def get_history_size():
   return HIST_SIZE

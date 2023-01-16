@@ -133,9 +133,9 @@ async def etl_consumer_producer(
   while True:
     try:
       que = asyncio.Queue(maxsize=ETL_QUEUE_SIZE)
-      tasks.append(asyncio.create_task(etl_processor_f(process_etl_data_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que)))
       for input_exchange in input_exchange_names:
           tasks.append(asyncio.create_task(data_subscriber_f(input_exchange, que)))
+      tasks.append(asyncio.create_task(etl_processor_f(process_etl_data_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que)))
       await asyncio.gather(*tasks, return_exceptions=False)
       await que.join()
     except asyncio.CancelledError as err:

@@ -30,9 +30,12 @@ namespace f  = fmt;
 
 using uint64 = uint64_t;
 constexpr uint64 HIST_SIZE = 1920;
-constexpr double FNAN = s::numeric_limits<double>::quiet_NaN(); //TODO: rename ?
+constexpr double FNAN = s::numeric_limits<double>::quiet_NaN();
 constexpr double FMAX = s::numeric_limits<double>::max();
 constexpr double FMIN = s::numeric_limits<double>::min();
+constexpr double FINF = s::numeric_limits<double>::infinity();
+constexpr uint64 IMAX = s::numeric_limits<uint64>::max();
+constexpr uint64 IMIN = s::numeric_limits<uint64>::min();
 constexpr char STIME_COLNAME[] = "sequence_time";
 constexpr char DATETIME_FORMAT[] = "%Y-%m-%dT%H:%M:%S %Z";
 constexpr char OUTPUT_DATETIME_FORMAT[] = "%Y-%m-%dT%H:%M:%S.000000 %Z"; //TODO: hack, because we only print epoch in seconds, this is okay
@@ -45,8 +48,6 @@ using IVectorHist = s::array<s::vector<uint64>, HIST_SIZE>;
 using FValueHist  = s::array<double, HIST_SIZE>;
 using IValueHist  = s::array<uint64, HIST_SIZE>;
 using SimpleJsonType = s::variant<s::string,double,int64_t,uint64_t,bool,s::nullptr_t>;
-
-//TODO: report error to stderr. not stdout
 
 uint64 next_idx(uint64 idx){
   idx = idx + 1 < HIST_SIZE ? idx + 1 : 0;
@@ -84,20 +85,28 @@ s::string epoch_to_timestamp(uint64 epoch, const s::string& format){
   return out;
 }
 
-//TODO: return error
-//TODO: handle infinity
-void parse_double(double& out, j::ondemand::value value){
+j::error_code parse_double(double& out, j::ondemand::value value){
   j::ondemand::json_type ty;
-  auto error = value.type().get(ty);
+  j::error_code error = value.type().get(ty);
   if (error){
     out = FNAN;
-    return;
+    return error;
   }
   switch (ty){
   break; case j::ondemand::json_type::string: {
     s::string_view sv;
     error = value.get(sv);
-    s::from_chars(begin(sv), end(sv), out);
+    if (error) return error;
+    s::string s = {s::begin(sv), s::end(sv)};
+    s::transform(s::begin(s), s::end(s), s::begin(s), [](char c){ return s::tolower(c); });
+    if (s == "inf" or s == "infinity")
+      out = FINF;
+    else if (s == "-inf" or s == "-infinity")
+      out = FINF * -1;
+    else if (sv == "nan")
+      out = FNAN;
+    else
+      s::from_chars(s::begin(sv), s::end(sv), out);
   }
   break; case j::ondemand::json_type::number: {
     j::ondemand::number number = value.get_number();
@@ -106,20 +115,33 @@ void parse_double(double& out, j::ondemand::value value){
   break; default:
     out = FNAN;
   }
+  return error;
 }
 
-void parse_uint(uint64& out, j::ondemand::value value){
+j::error_code parse_uint(uint64& out, j::ondemand::value value){
   j::ondemand::json_type ty;
-  auto error = value.type().get(ty);
+  j::error_code error = value.type().get(ty);
   if (error){
     out = 0;
-    return;
+    return error;
   }
   switch (ty){
   break; case j::ondemand::json_type::string: {
     s::string_view sv;
     error = value.get(sv);
-    s::from_chars(begin(sv), end(sv), out);
+    if (error) return error;
+    s::string s = {s::begin(sv), s::end(sv)};
+    s::transform(s::begin(s), s::end(s), s::begin(s), [](char c){ return s::tolower(c); });
+    if (s == "inf" or s == "infinity")
+      out = IMAX;
+    else if (s == "-inf" or s == "-infinity")
+      out = IMIN;
+    else if (s == "max")
+      out = IMAX;
+    else if (s == "min")
+      out = IMIN;
+    else
+      s::from_chars(s::begin(sv), s::end(sv), out);
   }
   break; case j::ondemand::json_type::number: {
     j::ondemand::number number = value.get_number();
@@ -128,10 +150,12 @@ void parse_uint(uint64& out, j::ondemand::value value){
   break; default:
     out = 0;
   }
+  return error;
 }
 
-void parse_string(s::string_view& out, j::ondemand::value value){
-  auto error = value.get(out);
+j::error_code parse_string(s::string_view& out, j::ondemand::value value){
+  j::error_code error = value.get(out);
+  return error;
 }
 
 double compute_book_first_tick(const s::vector<double>& prices){
@@ -294,7 +318,26 @@ double compute_bidask_spread(double bid_price, double ask_price){
 }
 
 struct PidHistDataS1 {
-  //TODO
+  // book data
+  FValueHist mBookBidPrice;
+  FValueHist mBookAskPrice;
+  FValueHist mBookBidSize;
+  FValueHist mBookAskSize;
+  IValueHist mBookBidHand;
+  IValueHist mBookAskHand;
+  FValueHist mBookBidAskImbalance;
+  FValueHist mWapPrice;
+  FValueHist mBookReturn;
+  FValueHist mBidAskReturn;
+  FValueHist mBookBidAskSpread;
+
+  // trade data
+  IValueHist mTradeNBuys;
+  IValueHist mTradeNSells;
+  FValueHist mTradeSize;
+  FValueHist mTradeVolume;
+  FValueHist mTradeAvgPrice;
+  FValueHist mTradeReturn;
 };
 
 struct PidHistDataS2 {
@@ -333,8 +376,8 @@ struct PidHistDataS2 {
   FValueHist  mTradeReturn;
 };
 
-struct ETLS1State {
-  ETLS1State(): mNxtIdx(0) {
+struct ETLState {
+  ETLState(): mNxtIdx(0) {
     mBookLengths = {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
     mTradeLengths = {162, 324, 648, 960, 1440, 1920};
     //TODO: need to review this these lengths are appropriate
@@ -344,6 +387,154 @@ struct ETLS1State {
   uint64 hist_size() const {
     return HIST_SIZE;
   }
+
+protected:
+  template <typename T>
+  s::vector<s::array<double, 4>> rolling_avg_sum_max_min_multi_k(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
+    s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
+    double sum = 0.;
+    double s_min = FMAX;
+    double s_max = FMIN;
+    uint64 nan_count = 0, count = 0, length_idx = 0;
+    uint64 max_length = lengths.back();
+    uint64 min_timestamp = timestamp - max_length;
+    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
+      if (i == lengths[length_idx]){
+        double rmin = s_min == FMAX ? FNAN : s_min;
+        double rmax = s_max == FMIN ? FNAN : s_max;
+        if (count_nan){
+          s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
+          ret.push_back(a);
+        } else if (count - nan_count <= 0){
+          s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
+          ret.push_back(a);
+        } else {
+          s::array<double, 4> a = {sum/(count-nan_count), sum, rmin, rmin};
+          ret.push_back(a);
+        }
+        length_idx++;
+      }
+      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
+      if (not isnan(data[cur_idx])){
+        sum += data[cur_idx];
+        s_max = s::max(s_max, (double)data[cur_idx]);
+        s_min = s::min(s_min, (double)data[cur_idx]);
+      } else
+        nan_count++;
+    }
+    for (uint64 i = ret.size(); i < lengths.size(); ++i){
+      s::array<double, 4> a = {FNAN, FNAN, FNAN, FNAN};
+      ret.push_back(a);
+    }
+    return ret;
+  }
+
+  template <typename T>
+  s::vector<s::array<double, 4>> rolling_avg_sum_max_min_aoa_multi_k(const s::array<s::vector<T>, HIST_SIZE>& data, uint64 idx, uint64 ioidx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
+    s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
+    double sum = 0.;
+    double s_min = FMAX;
+    double s_max = FMIN;
+    uint64 nan_count = 0, count = 0, length_idx = 0;
+    uint64 max_length = lengths.back();
+    uint64 min_timestamp = timestamp - max_length;
+    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
+      if (i == lengths[length_idx]){
+        double rmin = s_min == FMAX ? FNAN : s_min;
+        double rmax = s_max == FMIN ? FNAN : s_max;
+        if (count_nan){
+          s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
+          ret.push_back(a);
+        } else if (count - nan_count <= 0){
+          s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
+          ret.push_back(a);
+        } else {
+          s::array<double, 4> a = {sum/(count-nan_count), sum, rmax, rmin};
+          ret.push_back(a);
+        }
+        length_idx++;
+      }
+      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
+      if (data[cur_idx].size() > ioidx and not isnan(data[cur_idx][ioidx])){
+        sum += data[cur_idx][ioidx];
+        s_max = s::max(s_max, (double)data[cur_idx][ioidx]);
+        s_min = s::min(s_min, (double)data[cur_idx][ioidx]);
+      } else 
+        nan_count++;
+    }
+    for (uint64 i = ret.size(); i < lengths.size(); ++i){
+      s::array<double, 4> a = {FNAN, FNAN, FNAN, FNAN};
+      ret.push_back(a);
+    }
+    return ret;
+  }
+
+  template <typename T>
+  s::vector<s::array<double, 4>> rolling_abs_avg_sum_max_min_multi_k(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
+    s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
+    double sum = 0.;
+    double s_min = FMAX;
+    double s_max = FMIN;
+    uint64 nan_count = 0, count = 0, length_idx = 0;
+    uint64 max_length = lengths.back();
+    uint64 min_timestamp = timestamp - max_length;
+    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
+      if (i == lengths[length_idx]){
+        double rmin = s_min == FMAX ? FNAN : s_min;
+        double rmax = s_max == FMIN ? FNAN : s_max;
+        if (count_nan){
+          s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
+          ret.push_back(a);
+        } else if (count - nan_count <= 0){
+          s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
+          ret.push_back(a);
+        } else {
+          s::array<double, 4> a = {sum/(count-nan_count), sum, rmax, rmin};
+          ret.push_back(a);
+        }
+        length_idx++;
+      }
+      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
+      if (not isnan(data[cur_idx])){
+        sum += abs(data[cur_idx]);
+        s_max = s::max(s_max, abs((double)data[cur_idx]));
+        s_min = s::min(s_min, abs((double)data[cur_idx]));
+      } else
+        nan_count++;
+    }
+    for (uint64 i = ret.size(); i < lengths.size(); ++i){
+      s::array<double, 4> a = {FNAN, FNAN, FNAN, FNAN};
+      ret.push_back(a);
+    }
+    return ret;
+  }
+
+  template <typename T>
+  s::array<double, 2> rolling_avg_sum(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, uint64 length){
+    s::array<double, 2> ret;
+    double sum = 0.;
+    uint64 count = 0;
+    uint64 min_timestamp = timestamp - length;
+    for (uint64 i = 0, cur_idx = idx; i < length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
+      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp)
+        continue;
+      if (not isnan(data[cur_idx]))
+        sum += data[cur_idx];
+    }
+    ret = {sum / count, sum};
+    return ret;
+  }
+
+  s::vector<uint64>           mBookLengths;
+  s::vector<uint64>           mTradeLengths;
+  s::vector<uint64>           mReturnLengths;
+  s::array<uint64, HIST_SIZE> mTimestamps;
+  s::vector<s::string>        mPids;
+  uint64                      mNxtIdx;
+};
+
+struct ETLS1State : public ETLState {
+  ETLS1State() : ETLState() {}
 
   void set_pids(s::vector<s::string>& pids){
     mPids = pids;
@@ -352,35 +543,404 @@ struct ETLS1State {
   }
 
   void insert(uint64 timestamp, const s::map<s::string, s::string>& pid_book, const s::map<s::string, s::string>& pid_trade){
-    //TODO
+    uint64 pidx = prev_idx(mNxtIdx);
+    mTimestamps[mNxtIdx] = timestamp;
+    for (const s::string& pid : mPids){
+      PidHistDataS1& pid_data = mPidDataMap[pid];
+
+      // process book
+      do {
+        decltype(pid_book.begin()) it = pid_book.find(pid);
+        if (it == pid_book.end()) break;
+
+        j::padded_string book_json((*it).second);
+        j::ondemand::document book_data;
+        auto error = json_parser.iterate(book_json).get(book_data);
+        if (error){
+          s::cerr << f::format("ERROR: Failed to read book data from string {}. timestamp {}", (*it).second, timestamp) << s::endl;
+          break;
+        }
+        j::ondemand::array bids;
+        error = book_data["bids"].get(bids);
+        if (error){
+          s::cerr << f::format("ERROR: Failed to get bids from book. timestamp {}", timestamp) << s::endl;
+          break;
+        }
+        for (j::ondemand::value bid : bids){
+          j::ondemand::array bid_array; error = bid.get(bid_array);
+          if (error){
+            s::cerr << f::format("ERROR: Failed to get array from bid array. timestamp {}", timestamp) << s::endl;
+            break;
+          }
+          size_t count = bid_array.count_elements();
+          if (count != 3){
+            s::cerr << f::format("ERROR: Unexpected number of elements in bid report. count {} timestamp {}", count, timestamp) << s::endl;
+            break;
+          }
+          double price = FNAN, size = FNAN; uint64 hand = 0, i = 0;
+          for (j::ondemand::value value : bid_array){
+            switch (i){
+            break; case 0: parse_double(price, value);
+            break; case 1: parse_double(size, value);
+            break; case 2: parse_uint(hand, value);
+            break; default:
+              s::cout << f::format("Extra element in bid array detected, ignored.") << s::endl;
+            }
+            i++;
+          }
+          pid_data.mBookBidPrice[mNxtIdx] = price;
+          pid_data.mBookBidSize[mNxtIdx]  = size;
+          pid_data.mBookBidHand[mNxtIdx]  = hand;
+          break;
+        }
+
+        j::ondemand::array asks;
+        error = book_data["asks"].get(asks);
+        if (error){
+          s::cerr << f::format("ERROR: Failed to get asks from book. timestamp {}", timestamp) << s::endl;
+          break;
+        }
+        for (j::ondemand::value ask : asks){
+          j::ondemand::array ask_array; error = ask.get(ask_array);
+          if (error){
+            s::cerr << f::format("ERROR: Failed to get array from ask array. timestamp {}", timestamp) << s::endl;
+            break;
+          }
+          size_t count = ask_array.count_elements();
+          if (count != 3){
+            s::cerr << f::format("ERROR: Unexpected number of elements in ask report. count {} timestamp {}", count, timestamp) << s::endl;
+            break;
+          }
+          double price = FNAN, size = FNAN; uint64 hand = 0, i = 0;
+          for (j::ondemand::value value : ask){
+            switch (i){
+            break; case 0: parse_double(price, value);
+            break; case 1: parse_double(size, value);
+            break; case 2: parse_uint(hand, value);
+            break; default:
+              s::cout << f::format("Extra element in ask array detected. ignored.") << s::endl;
+            }
+            i++;
+          }
+          pid_data.mBookAskPrice[mNxtIdx] = price;
+          pid_data.mBookAskSize[mNxtIdx] = size;
+          pid_data.mBookAskHand[mNxtIdx] = hand;
+          break;
+        }
+
+        pid_data.mBookBidAskImbalance[mNxtIdx] = compute_book_imbalance(
+            pid_data.mBookBidPrice[mNxtIdx], pid_data.mBookBidSize[mNxtIdx], pid_data.mBookAskPrice[mNxtIdx], pid_data.mBookAskSize[mNxtIdx],
+            pid_data.mBookBidPrice[pidx], pid_data.mBookBidSize[pidx], pid_data.mBookAskPrice[pidx], pid_data.mBookAskSize[pidx]
+        );
+
+        pid_data.mWapPrice[mNxtIdx] = compute_weighted_average_price(
+            pid_data.mBookBidPrice[mNxtIdx], pid_data.mBookBidSize[mNxtIdx], pid_data.mBookAskPrice[mNxtIdx], pid_data.mBookAskSize[mNxtIdx]
+        );
+
+        pid_data.mBookBidAskSpread[mNxtIdx] = compute_bidask_spread(pid_data.mBookBidPrice[mNxtIdx], pid_data.mBookAskPrice[mNxtIdx]);
+      } while (false);
+
+      // process trade
+      do {
+        decltype(pid_trade.begin()) it = pid_trade.find(pid);
+        if (it == pid_trade.end()) break;
+
+        double total_size = 0., total_volume = 0.;
+        uint64 count_buys = 0, count_sells = 0;
+
+        j::padded_string trade_json((*it).second);
+        j::ondemand::document trade_data;
+        auto error = json_parser.iterate(trade_json).get(trade_data);
+        if (error){
+          s::cerr << f::format("ERROR: Failed to parse trade json. data {} timestamp {}", (*it).second, timestamp) << s::endl;
+          break;
+        }
+        j::ondemand::array trade_array;
+        error = trade_data.get_array().get(trade_array);
+        if (error){
+          s::cerr << f::format("ERROR: Failed to read trade array. timestamp {}", timestamp) << s::endl;
+          break;
+        }
+        for (j::ondemand::object obj : trade_array){
+          double trade_price = FNAN, trade_size = FNAN;
+          s::string_view trade_side;
+
+          parse_double(trade_price, obj["price"]);
+          parse_double(trade_size, obj["size"]);
+          parse_string(trade_side, obj["side"]);
+          //obj["time"]
+          //obj["trade_id"]
+
+          total_size += trade_size;
+          total_volume += trade_size * trade_price;
+          if (trade_side == "buy")
+            count_buys += 1;
+          else if (trade_side == "sell")
+            count_sells += 1;
+          else
+            s::cerr << f::format("ERROR: Unexpected trade side value: {} timestam[ {}", trade_side, timestamp) << s::endl;
+        }
+        pid_data.mTradeNBuys[mNxtIdx]  = count_buys;
+        pid_data.mTradeNSells[mNxtIdx] = count_sells;
+        pid_data.mTradeSize[mNxtIdx]   = total_size;
+        pid_data.mTradeVolume[mNxtIdx] = total_volume;
+        if (total_size > 0){
+          pid_data.mTradeAvgPrice[mNxtIdx] = total_volume / total_size;
+          pid_data.mTradeReturn[mNxtIdx] = FNAN;
+          uint64 idx = pidx;
+          while (idx != mNxtIdx){
+            if (mTimestamps[idx] == 0 or mTimestamps[idx] > mTimestamps[mNxtIdx])
+              break;
+            if (not isnan(pid_data.mTradeAvgPrice[idx])){
+              pid_data.mTradeReturn[mNxtIdx] = compute_return(pid_data.mTradeAvgPrice[idx], pid_data.mTradeAvgPrice[mNxtIdx]);
+              break;
+            }
+
+            idx = prev_idx(idx);
+          }
+        } else {
+          pid_data.mTradeAvgPrice[mNxtIdx] = FNAN;
+          pid_data.mTradeReturn[mNxtIdx] = FNAN;
+        }
+      } while (false);
+    }
+    mBookMeanReturn27[mNxtIdx] = rolling_mean_return(mNxtIdx, timestamp, 27);
+
+    mNxtIdx = next_idx(mNxtIdx);
   }
 
   s::unordered_map<s::string, SimpleJsonType> produce_output(uint64 timestamp){
-    //TODO
+    s::unordered_map<s::string, SimpleJsonType> data;
+    data[STIME_COLNAME] = SimpleJsonType(epoch_to_timestamp(timestamp, OUTPUT_DATETIME_FORMAT));
+    //TODO: do binary search
+    uint64 idx = 0;
+    for (; idx < HIST_SIZE; ++idx){
+      if (mTimestamps[idx] == timestamp)
+        break;
+    }
+    if (idx >= HIST_SIZE) return data;
+    for (const s::string& pid : mPids){
+      PidHistDataS1& pid_data = mPidDataMap[pid];
+
+      data[field_name(pid, "best_bid_price")] = pid_data.mBookBidPrice[idx];
+      data[field_name(pid, "best_ask_price")] = pid_data.mBookAskPrice[idx];
+      data[field_name(pid, "best_bid_size")]  = pid_data.mBookBidSize[idx];
+      data[field_name(pid, "best_ask_size")]  = pid_data.mBookAskSize[idx];
+      data[field_name(pid, "best_bid_hand")]  = pid_data.mBookBidHand[idx];
+      data[field_name(pid, "best_ask_hand")]  = pid_data.mBookAskHand[idx];
+      data[field_name(pid, "ba_imbalance")]   = pid_data.mBookBidAskImbalance[idx];
+      data[field_name(pid, "wap")]            = pid_data.mWapPrice[idx];
+      data[field_name(pid, "book_return")]    = pid_data.mBookReturn[idx];
+      data[field_name(pid, "ba_spread")]      = pid_data.mBookBidAskSpread[idx];
+
+      produce_book_output_rolling_multi_k(data, pid, idx, timestamp);
+      produce_trade_output_rolling_multi_k(data, pid, idx, timestamp);
+
+      s::vector<double> book_volatility = rolling_volatility_multi_k(pid_data.mBookReturn, idx, timestamp, mReturnLengths);
+      for (uint64 i = 0; i < book_volatility.size(); ++i)
+        data[field_name(pid, "book_volatility", mReturnLengths[i], "")] = book_volatility[i];
+
+      data[field_name(pid, "book_beta", 648, "")] = rolling_beta(pid_data.mBookReturn, idx, timestamp, 648);
+
+      s::vector<double> trade_volatility = rolling_volatility_multi_k(pid_data.mTradeReturn, idx, timestamp, mReturnLengths);
+      for (uint64 i = 0; i < trade_volatility.size(); ++i)
+        data[field_name(pid, "trade_volatility", mReturnLengths[i], "")] = trade_volatility[i];
+    }
+
+    data["book_mean_return_27"] = mBookMeanReturn27[idx];
+
+    return data;
   }
 protected:
+  void produce_book_output_rolling_multi_k(s::unordered_map<s::string, SimpleJsonType>& data, const s::string& pid, uint64 idx, uint64 timestamp){
+    PidHistDataS1& pid_data = mPidDataMap[pid];
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookBidPrice, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "best_bid_price", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "best_bid_price", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "best_bid_price", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookAskPrice, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "best_ask_price", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "best_ask_price", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "best_ask_price", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookBidSize, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "best_bid_size", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "best_bid_size", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "best_bid_size", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookAskSize, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "best_ask_size", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "best_ask_size", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "best_ask_size", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookBidHand, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "best_bid_hand", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "best_bid_hand", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "best_bid_hand", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookAskHand, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "best_ask_hand", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "best_ask_hand", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "best_ask_hand", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookBidAskImbalance, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "ba_imbalance", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "ba_imbalance", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "ba_imbalance", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mWapPrice, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "wap", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "wap", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "wap", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookReturn, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "book_return", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "book_return", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "book_return", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mBookBidAskSpread, idx, timestamp, mBookLengths);
+      for (uint64 i = 0; i < mBookLengths.size(); ++i){
+        data[field_name(pid, "ba_spread", mBookLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "ba_spread", mBookLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "ba_spread", mBookLengths[i], "min")] = output[i][3];
+      }
+    }
+  }
+
+  void produce_trade_output_rolling_multi_k(s::unordered_map<s::string, SimpleJsonType>& data, const s::string& pid, uint64 idx, uint64 timestamp){
+    PidHistDataS1& pid_data = mPidDataMap[pid];
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeNBuys, idx, timestamp, mTradeLengths);
+      for (uint64 i = 0; i < mTradeLengths.size(); ++i)
+        data[field_name(pid, "trade_buy_count", mTradeLengths[i], "sum")] = output[i][1];
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeNSells, idx, timestamp, mTradeLengths);
+      for (uint64 i = 0; i < mTradeLengths.size(); ++i)
+        data[field_name(pid, "trade_sell_count", mTradeLengths[i], "sum")] = output[i][1];
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths, true);
+      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
+        data[field_name(pid, "trade_size", mTradeLengths[i], "sum")] = output[i][1];
+        data[field_name(pid, "trade_size", mTradeLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "trade_size", mTradeLengths[i], "max")] = output[i][2];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeVolume, idx, timestamp, mTradeLengths);
+      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
+        data[field_name(pid, "trade_volume", mTradeLengths[i], "sum")] = output[i][1];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeAvgPrice, idx, timestamp, mTradeLengths);
+      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
+        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "min")] = output[i][3];
+      }
+    }
+    {
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
+      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
+        data[field_name(pid, "trade_return", mTradeLengths[i], "avg")] = output[i][0];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = output[i][1];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "max")] = output[i][2];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "min")] = output[i][3];
+      }
+    }
+
+  }
+
+  double rolling_mean_return(uint64 idx, uint64 timestamp, uint64 length){
+    double sum = 0.;
+    for (const s::string& pid : mPids){
+      PidHistDataS1& pid_data = mPidDataMap[pid];
+      s::array<double, 2> as = rolling_avg_sum(pid_data.mBookReturn, idx, timestamp, length);
+      sum += as[1];
+    }
+    return sum / mPids.size();
+  }
+
+  double rolling_beta(const s::array<double, HIST_SIZE>& prdata, uint64 idx, uint64 timestamp, uint64 length){
+    double m2sum = 0., mrsum = 0.;
+    uint64 count = 0, nan_count = 0;
+    uint64 min_timestamp = timestamp - length;
+    for (uint64 i = 0, cur_idx = idx; i < length; i++, cur_idx = prev_idx(cur_idx), count++){
+      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp)
+        continue;
+      if (not isnan(mBookMeanReturn27[cur_idx]) and not isnan(prdata[cur_idx])){
+        m2sum += pow(mBookMeanReturn27[cur_idx], 2.);
+        mrsum += mBookMeanReturn27[cur_idx] * prdata[cur_idx];
+      } else
+        nan_count++;
+    }
+    if (nan_count == count) return FNAN;
+    else                    return (mrsum / (count - nan_count)) / (m2sum / (count - nan_count));
+  }
+
+//TODO: need to design cache, no cache type yet, nor is cache used
+
+  template <typename T>
+  s::vector<double> rolling_volatility_multi_k(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, const s::vector<uint64>& lengths){
+    s::vector<double> ret; ret.reserve(lengths.size());
+    double sum = 0.;
+    uint64 max_length = lengths.back();
+    uint64 min_timestamp = timestamp - max_length;
+    uint64 length_idx = 0;
+    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; i++, cur_idx = prev_idx(cur_idx)){
+      if (i == lengths[length_idx]){
+        ret.push_back(sum);
+        length_idx++;
+      }
+      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
+      if (not isnan(data[cur_idx]))
+        sum += pow(data[cur_idx], 2);
+    }
+    for (uint64 i = ret.size(); i < lengths.size(); ++i)
+      ret.push_back(FNAN);
+    for (double& s : ret)
+      s = sqrt(s);
+    return ret;
+  }
+
 private:
-  s::vector<uint64>                          mBookLengths;
-  s::vector<uint64>                          mTradeLengths;
-  s::vector<uint64>                          mReturnLengths;
-  s::array<uint64, HIST_SIZE>                mTimestamps;
-  s::vector<s::string>                       mPids;
   s::unordered_map<s::string, PidHistDataS1> mPidDataMap;
   s::array<double, HIST_SIZE>                mBookMeanReturn27;
-  uint64                                     mNxtIdx;
 };
 
-struct ETLS2State {
-  ETLS2State(): mNxtIdx(0) {
-    mBookLengths = {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
-    mTradeLengths = {162, 324, 648, 960, 1440, 1920};
-    //TODO: need to review this these lengths are appropriate
-    mReturnLengths = {27, 81, 162, 324, 648, 960, 1440, 1920};
-  }
-
-  uint64 hist_size() const {
-    return HIST_SIZE;
-  }
+struct ETLS2State : public ETLState {
+  ETLS2State() : ETLState() {}
 
   void set_pids(s::vector<s::string>& pids){
     mPids = pids;
@@ -403,7 +963,7 @@ struct ETLS2State {
         j::ondemand::document book_data;
         auto error = json_parser.iterate(book_json).get(book_data);
         if (error) {
-          s::cout << f::format("ERROR: Failed to read book data from string {}. timestamp {}", (*it).second, timestamp) << s::endl;
+          s::cerr << f::format("ERROR: Failed to read book data from string {}. timestamp {}", (*it).second, timestamp) << s::endl;
           break;
         }
         s::vector<double> bid_prices;
@@ -413,7 +973,7 @@ struct ETLS2State {
         j::ondemand::array bids;
         error = book_data["bids"].get(bids);
         if (error) {
-          s::cout << f::format("ERROR: Failed to get bids from book. timestamp {}.", timestamp) << s::endl;
+          s::cerr << f::format("ERROR: Failed to get bids from book. timestamp {}.", timestamp) << s::endl;
           break;
         }
         for (j::ondemand::value val : bids){
@@ -423,12 +983,12 @@ struct ETLS2State {
           break; case j::ondemand::json_type::array: {
             j::ondemand::array bid; error = val.get(bid);
             if (error){
-              s::cout << f::format("ERROR: Failed to get array from bid array. timestamp {}", timestamp) << s::endl;
+              s::cerr << f::format("ERROR: Failed to get array from bid array. timestamp {}", timestamp) << s::endl;
               continue;
             }
             size_t count = bid.count_elements();
             if (count != 3){
-              s::cout << f::format("ERROR: Unexpected number of elements in bid report. count {} timestamp {}", count, timestamp) << s::endl;
+              s::cerr << f::format("ERROR: Unexpected number of elements in bid report. count {} timestamp {}", count, timestamp) << s::endl;
               continue;
             }
             double price = FNAN, size = FNAN; uint64 hands = 0, i = 0;
@@ -437,7 +997,8 @@ struct ETLS2State {
               break; case 0: parse_double(price, value);
               break; case 1: parse_double(size, value);
               break; case 2: parse_uint(hands, value);
-              break; default:; //TODO:report error
+              break; default:
+                s::cout << f::format("Extra element in bid array detected. ignored.") << s::endl;
               }
               i++;
             }
@@ -450,7 +1011,7 @@ struct ETLS2State {
             bid_stack_size = number.get_uint64();
           }
           break; default:
-            s::cout << f::format("ERROR: Unexpected type in bids data. timestamp {}", timestamp) << s::endl;
+            s::cerr << f::format("ERROR: Unexpected type in bids data. timestamp {}", timestamp) << s::endl;
             continue;
           }
         }
@@ -466,7 +1027,7 @@ struct ETLS2State {
         j::ondemand::array asks;
         error = book_data["asks"].get(asks);
         if (error) {
-          s::cout << f::format("ERROR: Failed to get asks from book. timestamp {}", timestamp) << s::endl;
+          s::cerr << f::format("ERROR: Failed to get asks from book. timestamp {}", timestamp) << s::endl;
           break;
         }
         for (j::ondemand::value val : asks){
@@ -476,12 +1037,12 @@ struct ETLS2State {
           break; case j::ondemand::json_type::array: {
             j::ondemand::array ask; error = val.get(ask);
             if (error){
-              s::cout << f::format("ERROR: Failed to get array from ask array. timestamp {}", timestamp) << s::endl;
+              s::cerr << f::format("ERROR: Failed to get array from ask array. timestamp {}", timestamp) << s::endl;
               continue;
             }
             size_t count = ask.count_elements();
             if (count != 3){
-              s::cout << f::format("ERROR: Unexpected number of elements in ask report. count {} timestamp {}", count, timestamp) << s::endl;
+              s::cerr << f::format("ERROR: Unexpected number of elements in ask report. count {} timestamp {}", count, timestamp) << s::endl;
               continue;
             }
             double price = FNAN, size = FNAN; uint64 hands = 0, i = 0;
@@ -490,7 +1051,8 @@ struct ETLS2State {
               break; case 0: parse_double(price, value);
               break; case 1: parse_double(size, value);
               break; case 2: parse_uint(hands, value);
-              break; default:; //TODO: report error
+              break; default:
+                s::cout << f::format("Extra element in ask array detected. ignored") << s::endl;
               }
               i++;
             }
@@ -503,7 +1065,7 @@ struct ETLS2State {
             ask_stack_size = number.get_uint64();
           }
           break; default:
-            s::cout << f::format("ERROR: Unexpected type in ask array. timestamp {}", timestamp) << s::endl;
+            s::cerr << f::format("ERROR: Unexpected type in ask array. timestamp {}", timestamp) << s::endl;
             continue;
           }
         }
@@ -579,13 +1141,13 @@ struct ETLS2State {
         j::ondemand::document trade_data;
         auto error = json_parser.iterate(trade_json).get(trade_data);
         if (error) {
-          s::cout << f::format("ERROR: Failed to parse trade json. data {} timestamp {}", (*it).second, timestamp) << s::endl;
+          s::cerr << f::format("ERROR: Failed to parse trade json. data {} timestamp {}", (*it).second, timestamp) << s::endl;
           break;
         }
         j::ondemand::array trade_array;
         error = trade_data.get_array().get(trade_array);
         if (error) {
-          s::cout << f::format("ERROR: Failed to read trade array. timestamp {}", timestamp) << s::endl;
+          s::cerr << f::format("ERROR: Failed to read trade array. timestamp {}", timestamp) << s::endl;
           break;
         }
         //TODO: some trades reported may be earlier than past second
@@ -607,7 +1169,7 @@ struct ETLS2State {
           else if (trade_side == "sell")
             count_sells += 1;
           else
-            s::cout << f::format("ERROR: Unexpected trade side value: {} timestamp {}", trade_side, timestamp) << s::endl;
+            s::cerr << f::format("ERROR: Unexpected trade side value: {} timestamp {}", trade_side, timestamp) << s::endl;
         }
         pid_data.mTradeNBuys[mNxtIdx] = count_buys;
         pid_data.mTradeNSells[mNxtIdx] = count_sells;
@@ -638,10 +1200,10 @@ struct ETLS2State {
     mNxtIdx = next_idx(mNxtIdx);
   }
 
-  //TODO: count nan not used anymore ?
   s::unordered_map<s::string, SimpleJsonType> produce_output(uint64 timestamp){
     s::unordered_map<s::string, SimpleJsonType> data;
     data[STIME_COLNAME] = SimpleJsonType(epoch_to_timestamp(timestamp, OUTPUT_DATETIME_FORMAT));
+    //TODO: do binary search
     uint64 idx = 0;
     for (; idx < HIST_SIZE; ++idx)
       if (mTimestamps[idx] == timestamp)
@@ -864,7 +1426,7 @@ protected:
         data[field_name(pid, "trade_sell_count", mTradeLengths[i], "sum")] = output[i][1];
     }
     {
-      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths, true);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
         data[field_name(pid, "trade_size", mTradeLengths[i], "sum")] = output[i][1];
         data[field_name(pid, "trade_size", mTradeLengths[i], "avg")] = output[i][0];
@@ -893,143 +1455,6 @@ protected:
         data[field_name(pid, "trade_return", mTradeLengths[i], "min")] = output[i][3];
       }
     }
-  }
-
-  template <typename T>
-  s::vector<s::array<double, 4>> rolling_avg_sum_max_min_multi_k(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
-    s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
-    double sum = 0.;
-    double s_min = FMAX;
-    double s_max = FMIN;
-    uint64 nan_count = 0, count = 0, length_idx = 0;
-    uint64 max_length = lengths.back();
-    uint64 min_timestamp = timestamp - max_length;
-    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
-      if (i == lengths[length_idx]){
-        double rmin = s_min == FMAX ? FNAN : s_min;
-        double rmax = s_max == FMIN ? FNAN : s_max;
-        if (count_nan){
-          s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
-          ret.push_back(a);
-        } else if (count - nan_count <= 0){
-          s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
-          ret.push_back(a);
-        } else {
-          s::array<double, 4> a = {sum/(count-nan_count), sum, rmin, rmin};
-          ret.push_back(a);
-        }
-        length_idx++;
-      }
-      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
-      if (not isnan(data[cur_idx])){
-        sum += data[cur_idx];
-        s_max = s::max(s_max, (double)data[cur_idx]);
-        s_min = s::min(s_min, (double)data[cur_idx]);
-      } else
-        nan_count++;
-    }
-    for (uint64 i = ret.size(); i < lengths.size(); ++i){
-      s::array<double, 4> a = {FNAN, FNAN, FNAN, FNAN};
-      ret.push_back(a);
-    }
-    return ret;
-  }
-
-  template <typename T>
-  s::vector<s::array<double, 4>> rolling_avg_sum_max_min_aoa_multi_k(const s::array<s::vector<T>, HIST_SIZE>& data, uint64 idx, uint64 ioidx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
-    s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
-    double sum = 0.;
-    double s_min = FMAX;
-    double s_max = FMIN;
-    uint64 nan_count = 0, count = 0, length_idx = 0;
-    uint64 max_length = lengths.back();
-    uint64 min_timestamp = timestamp - max_length;
-    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
-      if (i == lengths[length_idx]){
-        double rmin = s_min == FMAX ? FNAN : s_min;
-        double rmax = s_max == FMIN ? FNAN : s_max;
-        if (count_nan){
-          s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
-          ret.push_back(a);
-        } else if (count - nan_count <= 0){
-          s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
-          ret.push_back(a);
-        } else {
-          s::array<double, 4> a = {sum/(count-nan_count), sum, rmax, rmin};
-          ret.push_back(a);
-        }
-        length_idx++;
-      }
-      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
-      if (data[cur_idx].size() > ioidx and not isnan(data[cur_idx][ioidx])){
-        sum += data[cur_idx][ioidx];
-        s_max = s::max(s_max, (double)data[cur_idx][ioidx]);
-        s_min = s::min(s_min, (double)data[cur_idx][ioidx]);
-      } else 
-        nan_count++;
-    }
-    for (uint64 i = ret.size(); i < lengths.size(); ++i){
-      s::array<double, 4> a = {FNAN, FNAN, FNAN, FNAN};
-      ret.push_back(a);
-    }
-    return ret;
-  }
-
-  template <typename T>
-  s::vector<s::array<double, 4>> rolling_abs_avg_sum_max_min_multi_k(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
-    s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
-    double sum = 0.;
-    double s_min = FMAX;
-    double s_max = FMIN;
-    uint64 nan_count = 0, count = 0, length_idx = 0;
-    uint64 max_length = lengths.back();
-    uint64 min_timestamp = timestamp - max_length;
-    for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
-      if (i == lengths[length_idx]){
-        double rmin = s_min == FMAX ? FNAN : s_min;
-        double rmax = s_max == FMIN ? FNAN : s_max;
-        if (count_nan){
-          s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
-          ret.push_back(a);
-        } else if (count - nan_count <= 0){
-          s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
-          ret.push_back(a);
-        } else {
-          s::array<double, 4> a = {sum/(count-nan_count), sum, rmax, rmin};
-          ret.push_back(a);
-        }
-        length_idx++;
-      }
-      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
-      if (not isnan(data[cur_idx])){
-        sum += abs(data[cur_idx]);
-        s_max = s::max(s_max, abs((double)data[cur_idx]));
-        s_min = s::min(s_min, abs((double)data[cur_idx]));
-      } else
-        nan_count++;
-    }
-    for (uint64 i = ret.size(); i < lengths.size(); ++i){
-      s::array<double, 4> a = {FNAN, FNAN, FNAN, FNAN};
-      ret.push_back(a);
-    }
-    return ret;
-  }
-
-  //TODO: do we really need this ?
-  template <typename T>
-  s::array<double, 2> rolling_avg_sum(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, uint64 length){
-    s::array<double, 2> ret;
-    double sum = 0.;
-    uint64 count = 0;
-    uint64 min_timestamp = timestamp - length;
-    for (uint64 i = 0, cur_idx = idx; i < length + 1; ++i, cur_idx = prev_idx(cur_idx), count++){
-      if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp)
-        continue;
-      if (not isnan(data[cur_idx]))
-        sum += data[cur_idx];
-    }
-    ret = {sum / count, sum};
-    return ret;
   }
 
   double rolling_mean_return(uint64 idx, uint64 timestamp, uint64 length){
@@ -1085,14 +1510,8 @@ protected:
   }
 
 private:
-  s::vector<uint64>                          mBookLengths;
-  s::vector<uint64>                          mTradeLengths;
-  s::vector<uint64>                          mReturnLengths;
-  s::array<uint64, HIST_SIZE>                mTimestamps;
-  s::vector<s::string>                       mPids;
   s::unordered_map<s::string, PidHistDataS2> mPidDataMap;
   s::array<double, HIST_SIZE>                mBookMeanReturn27;
-  uint64                                     mNxtIdx;
 };
 
 PYBIND11_MODULE(cppext, m){

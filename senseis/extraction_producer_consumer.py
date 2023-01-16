@@ -115,23 +115,26 @@ async def extraction_consumer(pids, exchange_name, create_message_f, que):
     logging.info("Pushing to {}".format(exchange_name))
     while True:
       periodic_time, time_record, pid, data = await que.get()
-      if periodic_time in records:
-        records[periodic_time][pid] = data
+      cur_epoch = int(periodic_time.timestamp())
+      if cur_epoch in records:
+        records[cur_epoch][pid] = data
       else:
-        records[periodic_time] = {pid : data}
-      all_found = is_all_found(pids, records[periodic_time])
+        records[cur_epoch] = {pid : data}
+      all_found = is_all_found(pids, records[cur_epoch])
       if all_found:
-        body = create_message_f(periodic_time, time_record, records[periodic_time])
+        # cleanup old lost keys
+        for epoch in sorted(records.keys()):
+          if epoch < cur_epoch:
+            records.pop(epoch, None)
+        body = create_message_f(periodic_time, time_record, records[cur_epoch])
         msg = aio_pika.Message(body=body)
         logging.info("Sending {}".format(periodic_time))
-        cur_epoch = int(periodic_time.timestamp())
+        await exchange.publish(message=msg, routing_key='')
         epoch_interval = get_interval(cur_epoch)
         get_interval_gauge().set(epoch_interval)
-        push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-        await exchange.publish(message=msg, routing_key='')
         get_live_gauge().set_to_current_time()
         push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
-        records.pop(periodic_time, None)
+        records.pop(cur_epoch, None)
       que.task_done()
 
 async def extraction_producer_consumer(producer_f, consumer_f, create_message_f, pids, url, period, exchange_name, **args):
