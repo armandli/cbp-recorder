@@ -13,13 +13,15 @@ from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME, STIME_EPOCH_COLNAME
 from senseis.utility import setup_logging
 
+utc = pytz.timezone("UTC")
+
 def build_parser():
   parser = argparse.ArgumentParser(description='parameters')
   parser.add_argument('--file-prefix', type=str, help='filenam prefix', required=True)
   parser.add_argument('--dir', type=str, help='data file directory', default='../data')
-  parser.add_argument('--output-filename-prefix', type=str, help='output filename path prefix', required=True)
+  parser.add_argument('--output-filename-prefix', type=str, help='output filename prefix', required=True)
   parser.add_argument('--chunk-size', type=int, help='chunking size used during processing', default=16)
-  parser.add_argument('--max-groups', type=int, help='maximum number of groups', default=22)
+  parser.add_argument('--max-groups', type=int, help='maximum number of groups', default=12)
   parser.add_argument('--logfile', type=str, help='log filename', required=True)
   return parser
 
@@ -32,7 +34,6 @@ def get_all_files(data_dir, prefix):
   return files
 
 def sequence_epoch(row):
-  utc = pytz.timezone('UTC')
   return int(datetime.strptime(row[STIME_COLNAME], DATETIME_FORMAT).timestamp())
 
 def main():
@@ -81,7 +82,10 @@ def main():
   for tmpfile in tmpfiles:
     df = pd.read_parquet(tmpfile)
     data = pd.concat([data, df])
-  output_filename = "{}_{}_{}.parquet".format(args.output_filename_prefix, start_epoch, end_epoch)
+  # sort again
+  data.set_index(STIME_EPOCH_COLNAME)
+  data.sort_index(inplace=True)
+  output_filename = "{}/{}_{}_{}.parquet".format(args.dir, args.output_filename_prefix, start_epoch, end_epoch)
   logging.info("writing out output file".format(output_filename))
   data.to_parquet(output_filename)
   logging.info("Cleaning up tempfiles")

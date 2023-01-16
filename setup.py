@@ -37,6 +37,9 @@ setup(
       'prometheus-client',
       's3cmd',
       'jupyter',
+      'lightgbm',
+      'matplotlib',
+      'tqdm',
   ],
   entry_points={
     'console_scripts':[
