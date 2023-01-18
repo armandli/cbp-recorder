@@ -21,7 +21,7 @@ def build_parser():
   parser.add_argument('--dir', type=str, help='data file directory', default='../data')
   parser.add_argument('--output-filename-prefix', type=str, help='output filename prefix', required=True)
   parser.add_argument('--chunk-size', type=int, help='chunking size used during processing', default=16)
-  parser.add_argument('--max-groups', type=int, help='maximum number of groups', default=12)
+  parser.add_argument('--max-groups', type=int, help='maximum number of groups', default=10)
   parser.add_argument('--logfile', type=str, help='log filename', required=True)
   return parser
 
@@ -65,7 +65,7 @@ def main():
     dfs = [pd.read_parquet(file) for _, _, file in group]
     data = pd.concat(dfs)
     data[STIME_EPOCH_COLNAME] = data.apply(lambda row: sequence_epoch(row), axis=1)
-    data.set_index(STIME_EPOCH_COLNAME)
+    data = data.set_index(STIME_EPOCH_COLNAME)
     data.sort_index(inplace=True)
     for column in columns:
       logging.info("Converting Column {}".format(column))
@@ -77,14 +77,14 @@ def main():
     tmpfiles.append(tmpfile_name)
     logging.info("write {}".format(tmpfile_name))
     data.to_parquet(tmpfile_name)
+    dfs = None
   logging.info("combining files")
   data = pd.DataFrame(columns=columns)
+  df = None
+  columns = None
   for tmpfile in tmpfiles:
     df = pd.read_parquet(tmpfile)
     data = pd.concat([data, df])
-  # sort again
-  data.set_index(STIME_EPOCH_COLNAME)
-  data.sort_index(inplace=True)
   output_filename = "{}/{}_{}_{}.parquet".format(args.dir, args.output_filename_prefix, start_epoch, end_epoch)
   logging.info("writing out output file".format(output_filename))
   data.to_parquet(output_filename)
