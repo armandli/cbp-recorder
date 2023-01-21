@@ -187,8 +187,8 @@ def create_message(periodic_time, time_record, data):
   return zlib.compress(message.encode())
 
 async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity):
-  tasks = []
   while True:
+    tasks = []
     try:
       que = asyncio.Queue()
       tasks.append(asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que)))

@@ -71,6 +71,7 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
       ie_name, msg = await que.get()
       dat = json.loads(msg)
       cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
+      logging.info("Processing from {} data time {}".format(ie_name, dat[STIME_COLNAME]))
       epoch_interval = get_interval(cur_epoch)
       get_interval_gauge().set(epoch_interval)
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
@@ -129,8 +130,8 @@ async def etl_consumer_producer(
     input_exchange_names,
     periodicity
   ):
-  tasks = []
   while True:
+    tasks = []
     try:
       que = asyncio.Queue(maxsize=ETL_QUEUE_SIZE)
       for input_exchange in input_exchange_names:
