@@ -42,6 +42,7 @@ def build_parser():
   return parser
 
 HIST_SIZE = 1920
+MAX_WAIT_SECONDS = 30
 
 class ETLS2State(ETLState):
   def __init__(self):
@@ -583,8 +584,8 @@ class ETLS2State(ETLState):
 def create_state():
   return m.ETLS2State()
 
-def get_history_size():
-  return HIST_SIZE
+def get_max_wait_seconds():
+  return MAX_WAIT_SECONDS
 
 def main():
   parser = build_parser()
@@ -605,7 +606,7 @@ def main():
         etl_processor,
         process_etl_data,
         create_state,
-        get_history_size,
+        get_max_wait_seconds,
         args.exchange,
         [args.b20name, args.b21name, args.t0name, args.t1name],
         args.period,

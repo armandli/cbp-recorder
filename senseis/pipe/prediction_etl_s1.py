@@ -27,6 +27,7 @@ from senseis.metric_utility import get_live_gauge
 from senseis.metric_utility import create_etl_process_time_histogram
 
 HIST_SIZE = 1920
+MAX_WAIT_SECONDS = 30
 
 def build_parser():
   parser = argparse.ArgumentParser(description="parameters")
@@ -353,8 +354,8 @@ class ETLS1State(ETLState):
 def create_state():
   return m.ETLS1State()
 
-def get_history_size():
-  return HIST_SIZE
+def get_max_wait_seconds():
+  return MAX_WAIT_SECONDS
 
 def main():
   parser = build_parser()
@@ -375,7 +376,7 @@ def main():
         etl_processor,
         process_etl_data,
         create_state,
-        get_history_size,
+        get_max_wait_seconds,
         args.exchange,
         [args.b10name, args.b11name, args.t0name, args.t1name],
         args.period,

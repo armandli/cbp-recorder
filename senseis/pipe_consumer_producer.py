@@ -54,7 +54,7 @@ def process_etl_data(period, data, state):
 
   return zlib.compress(message.encode())
 
-async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que):
+async def etl_processor(etl_f, create_etl_state_f, get_max_wait_seconds_f, output_exchange_name, input_exchange_names, periodicity, que):
   utc = pytz.timezone("UTC")
   etl_state = create_etl_state_f()
   records = dict()
@@ -71,7 +71,6 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
       ie_name, msg = await que.get()
       dat = json.loads(msg)
       cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
-      logging.info("Processing from {} data time {}".format(ie_name, dat[STIME_COLNAME]))
       epoch_interval = get_interval(cur_epoch)
       get_interval_gauge().set(epoch_interval)
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
@@ -82,13 +81,13 @@ async def etl_processor(etl_f, create_etl_state_f, get_history_size_f, output_ex
       else:
         records[dat_period] = {ie_name : msg}
       for period in sorted(records.keys()):
-        period_str = utc.localize(datetime.utcfromtimestamp(period)).strftime(DATETIME_FORMAT)
-        if period < dat_period - get_history_size_f():
+        if period < dat_period - get_max_wait_seconds_f():
           records.pop(period, None)
         elif not is_all_found(input_exchange_names, records[period]) or period > dat_period:
           break
         else:
-          logging.info("Producing output data for period {}".format(period))
+          period_str = utc.localize(datetime.utcfromtimestamp(period)).strftime(DATETIME_FORMAT)
+          logging.info("Producing output data for period {}".format(period_str))
           output = etl_f(period, records[period], etl_state)
           msg = aio_pika.Message(body=output)
           logging.info("Sending {}".format(period_str))
@@ -125,7 +124,7 @@ async def etl_consumer_producer(
     etl_processor_f,
     process_etl_data_f,
     create_etl_state_f,
-    get_history_size_f,
+    get_max_wait_seconds_f,
     output_exchange_name,
     input_exchange_names,
     periodicity
@@ -136,7 +135,7 @@ async def etl_consumer_producer(
       que = asyncio.Queue(maxsize=ETL_QUEUE_SIZE)
       for input_exchange in input_exchange_names:
           tasks.append(asyncio.create_task(data_subscriber_f(input_exchange, que)))
-      tasks.append(asyncio.create_task(etl_processor_f(process_etl_data_f, create_etl_state_f, get_history_size_f, output_exchange_name, input_exchange_names, periodicity, que)))
+      tasks.append(asyncio.create_task(etl_processor_f(process_etl_data_f, create_etl_state_f, get_max_wait_seconds_f, output_exchange_name, input_exchange_names, periodicity, que)))
       await asyncio.gather(*tasks, return_exceptions=False)
       await que.join()
     except asyncio.CancelledError as err:
