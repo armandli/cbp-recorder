@@ -48,7 +48,7 @@ class ETLS2State(ETLState):
   def __init__(self):
     self.timestamps = [None for _ in range(HIST_SIZE)]
     self.book_lengths = [3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920]
-    self.trade_lengths = [162, 324, 648, 960, 1440, 1920]
+    self.trade_lengths = [27, 81, 162, 324, 648, 960, 1440, 1920]
     self.return_lengths = [27, 81, 162, 324, 648, 960, 1440, 1920]
     self.utc = pytz.timezone("UTC")
     self.pids = []

@@ -379,7 +379,7 @@ struct PidHistDataS2 {
 struct ETLState {
   ETLState(): mNxtIdx(0) {
     mBookLengths = {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
-    mTradeLengths = {162, 324, 648, 960, 1440, 1920};
+    mTradeLengths = {27, 81, 162, 324, 648, 960, 1440, 1920};
     //TODO: need to review this these lengths are appropriate
     mReturnLengths = {27, 81, 162, 324, 648, 960, 1440, 1920};
   }
