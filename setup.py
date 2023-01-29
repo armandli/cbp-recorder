@@ -38,6 +38,7 @@ setup(
       's3cmd',
       'jupyter',
       'lightgbm',
+      'shap',
       'matplotlib',
       'tqdm',
   ],
