@@ -112,7 +112,7 @@ async def data_subscriber(exchange_name, que):
   handler = partial(push_incoming_to_queue, que, utc, exchange_name)
   async with connection:
     channel = await connection.channel()
-    await channel.set_qos(prefetch_count=1) #TODO: needed ?
+    await channel.set_qos(prefetch_count=0) #prevent timeout
     exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
     queue = await channel.declare_queue('', auto_delete=True)
     await queue.bind(exchange=exchange)

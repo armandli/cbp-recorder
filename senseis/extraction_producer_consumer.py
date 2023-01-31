@@ -187,11 +187,12 @@ def create_message(periodic_time, time_record, data):
   return zlib.compress(message.encode())
 
 async def consume_extraction(subscriber_f, writer_f, data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity):
+  data = []
   while True:
     tasks = []
     try:
       que = asyncio.Queue()
-      tasks.append(asyncio.create_task(writer_f(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que)))
+      tasks.append(asyncio.create_task(writer_f(data_to_df_f, data, exchange_name, s3bucket, s3outdir, periodicity, que)))
       tasks.append(asyncio.create_task(subscriber_f(exchange_name, que)))
       await asyncio.gather(*tasks, return_exceptions=False)
       await que.join()
@@ -222,7 +223,7 @@ async def extraction_subscriber(exchange_name, que):
   handler = partial(push_to_queue, que)
   async with connection:
     channel = await connection.channel()
-    await channel.set_qos(prefetch_count=1) #TODO: needed ?
+    await channel.set_qos(prefetch_count=0) # prevent timeout
     exchange = await channel.declare_exchange(name=exchange_name, type='fanout')
     queue = await channel.declare_queue('', auto_delete=True)
     await queue.bind(exchange=exchange)
@@ -233,8 +234,7 @@ def get_period(epoch, periodicity):
   period = epoch // periodicity
   return period
 
-async def extraction_writer(data_to_df_f, exchange_name, s3bucket, s3outdir, periodicity, que):
-  data = []
+async def extraction_writer(data_to_df_f, data, exchange_name, s3bucket, s3outdir, periodicity, que):
   while True:
     msg = await que.get()
     dat = json.loads(msg)
