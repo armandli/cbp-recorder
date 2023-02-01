@@ -309,7 +309,10 @@ s::pair<double,double> mean(const s::vector<s::pair<double,double>>& v){
 }
 
 s::array<double, 3> linear_regression(const s::vector<double>& xs, const s::vector<double>& ys){
-  s::array<double, 3> ret;
+  s::array<double, 3> ret = {FNAN, FNAN, FNAN};
+
+  if (xs.size() == 0) return ret;
+
   double mx = mean(xs);
   double my = mean(ys);
 
@@ -333,7 +336,10 @@ s::array<double, 3> linear_regression(const s::vector<double>& xs, const s::vect
 }
 
 s::array<double, 3> linear_regression(const s::vector<s::pair<double,double>>& xys){
-  s::array<double, 3> ret;
+  s::array<double, 3> ret = {FNAN, FNAN, FNAN};
+
+  if (xys.size() == 0) return ret;
+
   s::pair<double,double> m = mean(xys);
 
   double sxx = 0., sxy = 0.;
@@ -490,10 +496,10 @@ struct PidHistDataS2 {
 struct ETLState {
   ETLState(): mNxtIdx(0) {
     //TODO: reduce length to 960
-    mBookLengths =  {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
-    mTradeLengths = {3, 9, 27, 81, 162, 324, 648, 960, 1440, 1920};
+    mBookLengths =  {3, 9, 27, 81, 162, 324, 648, 960};
+    mTradeLengths = {3, 9, 27, 81, 162, 324, 648, 960};
     //TODO: need to review this these lengths are appropriate
-    mReturnLengths = {27, 81, 162, 324, 648, 960, 1440, 1920};
+    mReturnLengths = {27, 81, 162, 324, 648, 960};
   }
 
   uint64 hist_size() const {
@@ -1192,9 +1198,7 @@ protected:
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mBookReturn, means, idx, timestamp, mBookLengths);
       s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mBookReturn, means, vars, idx, timestamp, mBookLengths);
       for (uint64 i = 0; i < mBookLengths.size(); ++i){
-        data[field_name(pid, "book_return", mBookLengths[i], "avg")] = means[i][0];
-        data[field_name(pid, "book_return", mBookLengths[i], "max")] = means[i][2];
-        data[field_name(pid, "book_return", mBookLengths[i], "min")] = means[i][3];
+        data[field_name(pid, "book_return", mBookLengths[i], "sum")] = means[i][1];
         data[field_name(pid, "book_return", mBookLengths[i], "std")] = vars[i][1];
         data[field_name(pid, "book_return", mBookLengths[i], "skew")] = skews[i][0];
         data[field_name(pid, "book_return", mBookLengths[i], "kurt")] = skews[i][1];
@@ -1224,14 +1228,9 @@ protected:
     }
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeBuySellDiff, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeBuySellDiff, means, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeBuySellDiff, means, vars, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
         data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "avg")] = means[i][0];
         data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "sum")] = means[i][1];
-        data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
     {
@@ -1249,14 +1248,9 @@ protected:
     }
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeVolume, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeVolume, means, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeVolume, means, vars, idx, timestamp, mTradeLengths, true);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
         data[field_name(pid, "trade_volume", mTradeLengths[i], "sum")] = means[i][1];
         data[field_name(pid, "trade_volume", mTradeLengths[i], "max")] = means[i][2];
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
     {
@@ -1273,12 +1267,14 @@ protected:
       }
     }
     {
-      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeReturn, means, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeReturn, means, vars, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_return", mTradeLengths[i], "avg")] = output[i][0];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = output[i][1];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "max")] = output[i][2];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "min")] = output[i][3];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = means[i][1];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "std")] = vars[i][1];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "skew")] = skews[i][0];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
     {
@@ -1950,9 +1946,7 @@ protected:
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mBookReturn, means, idx, timestamp, mBookLengths);
       s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mBookReturn, means, vars, idx, timestamp, mBookLengths);
       for (uint64 i = 0; i < mBookLengths.size(); ++i){
-        data[field_name(pid, "book_return", mBookLengths[i], "avg")]  = means[i][0];
-        data[field_name(pid, "book_return", mBookLengths[i], "max")]  = means[i][2];
-        data[field_name(pid, "book_return", mBookLengths[i], "min")]  = means[i][3];
+        data[field_name(pid, "book_return", mBookLengths[i], "sum")]  = means[i][1];
         data[field_name(pid, "book_return", mBookLengths[i], "std")]  = vars[i][1];
         data[field_name(pid, "book_return", mBookLengths[i], "skew")] = skews[i][0];
         data[field_name(pid, "book_return", mBookLengths[i], "kurt")] = skews[i][1];
@@ -2030,12 +2024,14 @@ protected:
       }
     }
     {
-      s::vector<s::array<double, 4>> output = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeReturn, means, idx, timestamp, mTradeLengths);
+      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeReturn, means, vars, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_return", mTradeLengths[i], "avg")] = output[i][0];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = output[i][1];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "max")] = output[i][2];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "min")] = output[i][3];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = means[i][1];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "std")] = vars[i][1];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "skew")] = skews[i][0];
+        data[field_name(pid, "trade_return", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
     {
