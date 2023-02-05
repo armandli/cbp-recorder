@@ -50,6 +50,10 @@ enum class TradeSide : int {
   INVALID=2,
 };
 
+//TODO: do a better job with trade data processing:
+//      1. make sure trade filter is correct here
+//      2. better calculation of trade price, trade volume, trade size back in time
+
 struct Trade {
   uint64 trade_id;
   double trade_time;
@@ -978,6 +982,8 @@ struct ETLS1State : public ETLState {
             pid_data.mBookBidPrice[mNxtIdx], pid_data.mBookBidSize[mNxtIdx], pid_data.mBookAskPrice[mNxtIdx], pid_data.mBookAskSize[mNxtIdx]
         );
 
+        pid_data.mBookReturn[mNxtIdx] = compute_return(pid_data.mWapPrice[pidx], pid_data.mWapPrice[mNxtIdx]);
+
         pid_data.mBookBidAskSpread[mNxtIdx] = compute_bidask_spread(pid_data.mBookBidPrice[mNxtIdx], pid_data.mBookAskPrice[mNxtIdx]);
       } while (false);
 
@@ -1207,6 +1213,7 @@ protected:
       for (uint64 i = 0; i < mTradeLengths.size(); ++i)
         data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "sum")] = means[i][1];
     }
+    //TODO: wrong, we can do better from the raw trades
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths, true);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeSize, means, idx, timestamp, mTradeLengths, true);
@@ -1220,11 +1227,13 @@ protected:
         data[field_name(pid, "trade_size", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+    //TODO: wrong, we can do better from the raw trades
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeVolume, idx, timestamp, mTradeLengths, true);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i)
         data[field_name(pid, "trade_volume", mTradeLengths[i], "sum")] = means[i][1];
     }
+    //TODO: wrong, we can do better from the raw trades
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeAvgPrice, idx, timestamp, mTradeLengths);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeAvgPrice, means, idx, timestamp, mTradeLengths);
@@ -1236,6 +1245,7 @@ protected:
         data[field_name(pid, "trade_avg_price", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+    //TODO: wrong, we can do better after the avg price is computed
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeReturn, means, idx, timestamp, mTradeLengths);
@@ -1247,6 +1257,7 @@ protected:
         data[field_name(pid, "trade_return", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+
     {
       s::vector<s::array<double, 3>> output = linear_regress_trade_price_multi_k(pid_data.mTrades, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
@@ -1498,6 +1509,7 @@ struct ETLS2State : public ETLState {
           );
         else
           pid_data.mWapPrice[mNxtIdx] = FNAN;
+
         pid_data.mBookReturn[mNxtIdx] = compute_return(pid_data.mWapPrice[pidx], pid_data.mWapPrice[mNxtIdx]);
 
         if (pid_data.mBookBidPrices[mNxtIdx].size() > 0 and pid_data.mBookAskPrices[mNxtIdx].size() > 0)
@@ -1898,6 +1910,7 @@ protected:
       for (uint64 i = 0; i < mTradeLengths.size(); ++i)
         data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "avg")] = means[i][0];
     }
+    //TODO: wrong, we can do better with the raw trades
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths, true);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeSize, means, idx, timestamp, mTradeLengths, true);
@@ -1909,6 +1922,7 @@ protected:
         data[field_name(pid, "trade_size", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+    //TODO: wrong, we can do better with the raw trades
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeVolume, idx, timestamp, mTradeLengths, true);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeVolume, means, idx, timestamp, mTradeLengths, true);
@@ -1920,6 +1934,7 @@ protected:
         data[field_name(pid, "trade_volume", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+    //TODO: wrong, we can do better with the raw trades
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeAvgPrice, idx, timestamp, mTradeLengths);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeAvgPrice, means, idx, timestamp, mTradeLengths);
@@ -1931,6 +1946,7 @@ protected:
         data[field_name(pid, "trade_avg_price", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+    //TODO: wrong, we can do better after the raw trades are computed
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeReturn, means, idx, timestamp, mTradeLengths);
@@ -1942,6 +1958,7 @@ protected:
         data[field_name(pid, "trade_return", mTradeLengths[i], "kurt")] = skews[i][1];
       }
     }
+
     {
       s::vector<s::array<double, 3>> output = linear_regress_trade_price_multi_k(pid_data.mTrades, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
