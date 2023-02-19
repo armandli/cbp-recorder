@@ -287,3 +287,42 @@ async def extraction_writer(data_to_df_f, data, exchange_name, s3bucket, s3outdi
         logging.error("Unexpected write error: {}".fomat(err))
         await asyncio.sleep(S3_RETRY_TIME_SECOND)
     que.task_done()
+
+async def monitor_extraction(subscriber_f, extraction_f, monitor_f, exchange_name):
+  while True:
+    tasks = []
+    try:
+      que = asyncio.Queue()
+      tasks.append(asyncio.create_task(extraction_f(monitor_f, exchange_name, que)))
+      tasks.append(asyncio.create_task(subscriber_f(exchange_name, que)))
+      await asyncio.gather(*tasks, return_exceptions=False)
+      await que.join()
+    except asyncio.CancelledError as err:
+      logging.info("Cancelled Error {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_counter().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    except SocketError as err:
+      logging.info("Socket Error: {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_counter().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+
+async def extraction_monitor(monitor_f, exchange_name, que):
+  while True:
+    msg = await que.get()
+    dat = json.loads(msg)
+    cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
+    epoch_interval = get_interval(cur_epoch)
+    get_interval_gauge().set(epoch_interval)
+    get_live_gauge().set_to_current_time()
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    logging.info("Received {}".format(cur_epoch))
+    monitor_f(dat, exchange_name)
+    que.task_done()

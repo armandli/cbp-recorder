@@ -26,3 +26,10 @@ def build_subscriber_parser():
   parser.add_argument('--exchange', type=str, help='queue exchange name', required=True)
   parser.add_argument('--logfile', type=str, help='logfile path', required=True)
   return parser
+
+def build_monitor_parser():
+  parser = argparse.ArgumentParser(description='')
+  parser.add_argument("--exchange", type=str, help="queue exchange name", required=True)
+  parser.add_argument("--logfile", type=str, help="log filename", required=True)
+  return parser
+

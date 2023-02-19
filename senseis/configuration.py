@@ -105,6 +105,12 @@ def get_exchange_pids(exchange_name):
   idx = int(exchange_name.split('_')[2])
   return EXCHANGE_PIDS[idx]
 
+def get_all_pids():
+  all_pids = []
+  all_pids.extend(EXCHANGE_PIDS[0])
+  all_pids.extend(EXCHANGE_PIDS[1])
+  return all_pids
+
 def get_book_level(exchange_name):
   level = exchange_name.split('_')[1]
   if '1' in level:

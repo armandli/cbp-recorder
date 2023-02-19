@@ -50,10 +50,6 @@ enum class TradeSide : int {
   INVALID=2,
 };
 
-//TODO: do a better job with trade data processing:
-//      1. make sure trade filter is correct here
-//      2. better calculation of trade price, trade volume, trade size back in time
-
 struct Trade {
   uint64 trade_id;
   double trade_time;
@@ -442,7 +438,6 @@ struct PidHistDataS1 {
   FValueHist mBookBidAskImbalance;
   FValueHist mWapPrice;
   FValueHist mBookReturn;
-  FValueHist mBidAskReturn;
   FValueHist mBookBidAskSpread;
 
   // trade data
@@ -500,8 +495,8 @@ struct PidHistDataS2 {
 struct ETLState {
   ETLState(): mNxtIdx(0) {
     mBookLengths =  {3, 9, 27, 81, 162, 324, 648, 960};
-    mTradeLengths = {3, 9, 27, 81, 162, 324, 648, 960};
-    mReturnLengths = {27, 81, 162, 324, 648, 960};
+    mTradeLengths =    {9, 27, 81, 162, 324, 648, 960};
+    mReturnLengths =   {9, 27, 81, 162, 324, 648, 960};
   }
 
   uint64 hist_size() const {
@@ -525,7 +520,7 @@ protected:
         if (count_nan){
           s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
           ret.push_back(a);
         } else {
@@ -561,7 +556,7 @@ protected:
         if (count_nan){
           s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
           ret.push_back(a);
         } else {
@@ -597,7 +592,7 @@ protected:
         if (count_nan){
           s::array<double, 4> a = {sum/count,             sum, rmax, rmin};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double, 4> a = {FNAN,                  sum, rmax, rmin};
           ret.push_back(a);
         } else {
@@ -691,7 +686,7 @@ protected:
           double var = sum / count;
           s::array<double, 2> a = {var,  sqrt(var)};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double, 2> a = {FNAN, FNAN};
           ret.push_back(a);
         } else {
@@ -725,7 +720,7 @@ protected:
           double var = sum / count;
           s::array<double, 2> a = {var,  sqrt(var)};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double, 2> a = {FNAN, FNAN};
           ret.push_back(a);
         } else {
@@ -758,7 +753,7 @@ protected:
         if (count_nan){
           s::array<double,2> a = {skew / count,           kurt / count};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double,2> a = {FNAN,                   FNAN};
           ret.push_back(a);
         } else {
@@ -792,7 +787,7 @@ protected:
         if (count_nan){
           s::array<double,2> a = {skew / count,           kurt / count};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double,2> a = {FNAN,                   FNAN};
           ret.push_back(a);
         } else {
@@ -826,7 +821,7 @@ protected:
         if (count_nan){
           s::array<double,2> a = {skew / count,           kurt / count};
           ret.push_back(a);
-        } else if (count - nan_count <= 0){
+        } else if (nan_count >= count){
           s::array<double,2> a = {FNAN,                   FNAN};
           ret.push_back(a);
         } else {
@@ -844,6 +839,117 @@ protected:
         kurt += pow((0. - means[length_idx][0]) / vars[length_idx][1], 4.);
       } else
         nan_count++;
+    }
+    return ret;
+  }
+
+  s::array<double, 16> trades_avg_sum_max_min_size_volume_price(const s::vector<Trade>& trades){
+    s::array<double, 16> ret = {
+    //avg   sum   max   min
+      FNAN, 0.,   FMIN, FMAX, // size
+      FNAN, 0.,   FMIN, FMAX, // volume
+      FNAN, FNAN, FMIN, FMAX, // price
+      FNAN, FNAN, FMIN, FMAX, // return
+    };
+    if (trades.size() == 0) return ret;
+
+    double prev_trade_price = FNAN;
+    for (const Trade& trade : trades){
+      double volume = trade.size * trade.price;
+      ret[1] += trade.size;
+      ret[2] = s::max(ret[2], trade.size);
+      ret[3] = s::min(ret[3], trade.size);
+      ret[5] += volume;
+      ret[6] = s::max(ret[6], volume);
+      ret[7] = s::min(ret[7], volume);
+      ret[10] = s::max(ret[10], trade.price);
+      ret[11] = s::min(ret[11], trade.price);
+      if (not isnan(prev_trade_price)){
+        ret[14] = s::max(ret[14], compute_return(prev_trade_price, trade.price));
+        ret[15] = s::min(ret[15], compute_return(prev_trade_price, trade.price));
+      }
+      prev_trade_price = trade.price;
+    }
+    ret[0] = ret[1] / trades.size();
+    ret[4] = ret[5] / trades.size();
+    ret[8] = ret[5] / ret[1];
+    if (trades.size() > 1){
+      ret[13] = compute_return(trades[0].price, trades.back().price);
+      ret[12] = ret[13] / (trades.size() - 1);
+    }
+    return ret;
+  }
+
+  s::array<double, 8> trades_var_std_size_volume_price(const s::vector<Trade>& trades, const s::array<double, 16>& means){
+    s::array<double, 8> ret = {
+    //var   std
+      0.,   FNAN, // size
+      0.,   FNAN, // volume
+      0.,   FNAN, // price
+      0.,   FNAN, // return
+    };
+    if (trades.size() == 0) return ret;
+
+    double prev_trade_price = FNAN;
+    for (const Trade& trade : trades){
+      double volume = trade.size * trade.price;
+      ret[0] += pow(trade.size - means[0], 2.);
+      ret[2] += pow(volume - means[4], 2.);
+      ret[4] += pow(trade.price - means[8], 2.);
+
+      if (not isnan(prev_trade_price)){
+        double r = compute_return(prev_trade_price, trade.price);
+        ret[6] += pow(r - means[12], 2.);
+      }
+      prev_trade_price = trade.price;
+    }
+    ret[0] /= trades.size();
+    ret[2] /= trades.size();
+    ret[4] /= trades.size();
+    ret[1] = sqrt(ret[0]);
+    ret[3] = sqrt(ret[2]);
+    ret[5] = sqrt(ret[4]);
+    if (trades.size() > 1){
+      ret[6] /= (trades.size() - 1);
+      ret[7] = sqrt(ret[6]);
+    }
+    return ret;
+  }
+
+  s::array<double, 8> trades_skew_kurt_size_volume_price(const s::vector<Trade>& trades, const s::array<double, 16>& means, const s::array<double, 8>& vars){
+    s::array<double, 8> ret = {
+    //skew  kurt
+      0.,   0., // size
+      0.,   0., // volume
+      0.,   0., // price
+      0.,   0., // return
+    };
+    if (trades.size() == 0) return ret;
+
+    double prev_trade_price = FNAN;
+    for (const Trade& trade : trades){
+      double volume = trade.size * trade.price;
+      ret[0] += pow((trade.size - means[0]) / vars[1], 3.);
+      ret[1] += pow((trade.size - means[0]) / vars[1], 4.);
+      ret[2] += pow((volume - means[4]) / vars[3], 3.);
+      ret[3] += pow((volume - means[4]) / vars[3], 4.);
+      ret[4] += pow((trade.price - means[8]) / vars[5], 3.);
+      ret[5] += pow((trade.price - means[8]) / vars[5], 4.);
+      if (not isnan(prev_trade_price)){
+        double r = compute_return(prev_trade_price, trade.price);
+        ret[6] += pow((r - means[12]) / vars[7], 3.);
+        ret[7] += pow((r - means[12]) / vars[7], 4.);
+      }
+    }
+    ret[0] /= trades.size();
+    ret[1] /= trades.size();
+    ret[2] /= trades.size();
+    ret[3] /= trades.size();
+    ret[4] /= trades.size();
+    ret[5] /= trades.size();
+    if (trades.size() > 1){
+      ret[6] /= (trades.size() - 1);
+      ret[7] /= (trades.size() - 1);
     }
     return ret;
   }
@@ -1213,51 +1319,46 @@ protected:
       for (uint64 i = 0; i < mTradeLengths.size(); ++i)
         data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "sum")] = means[i][1];
     }
-    //TODO: wrong, we can do better from the raw trades
     {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeSize, means, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeSize, means, vars, idx, timestamp, mTradeLengths, true);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_size", mTradeLengths[i], "sum")] = means[i][1];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "avg")] = means[i][0];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "max")] = means[i][2];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
-    //TODO: wrong, we can do better from the raw trades
-    {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeVolume, idx, timestamp, mTradeLengths, true);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i)
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "sum")] = means[i][1];
-    }
-    //TODO: wrong, we can do better from the raw trades
-    {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeAvgPrice, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeAvgPrice, means, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeAvgPrice, means, vars, idx, timestamp, mTradeLengths);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "avg")] = means[i][0];
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
-    //TODO: wrong, we can do better after the avg price is computed
-    {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeReturn, means, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeReturn, means, vars, idx, timestamp, mTradeLengths);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = means[i][1];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
+      uint64 length_idx = 0;
+      uint64 max_length = mTradeLengths.back();
+      uint64 min_timestamp = timestamp - max_length;
+      s::vector<Trade> trades;
+      for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx)){
+        if (i == mTradeLengths[length_idx]){
+          s::sort(s::begin(trades), s::end(trades), [](const Trade& a, const Trade& b){
+            return a.trade_id < b.trade_id;
+          });
 
+          s::array<double, 16> means = trades_avg_sum_max_min_size_volume_price(trades);
+          s::array<double, 8>  vars  = trades_var_std_size_volume_price(trades, means);
+          s::array<double, 8>  skews = trades_skew_kurt_size_volume_price(trades, means, vars);
+
+          data[field_name(pid, "trade_size", i, "sum")] = means[1];
+          data[field_name(pid, "trade_size", i, "std")] = vars[1];
+          data[field_name(pid, "trade_size", i, "skew")] = skews[0];
+          data[field_name(pid, "trade_size", i, "kurt")] = skews[1];
+
+          data[field_name(pid, "trade_volume", i, "sum")] = means[5];
+          data[field_name(pid, "trade_volume", i, "std")] = vars[3];
+          data[field_name(pid, "trade_volume", i, "skew")] = skews[2];
+          data[field_name(pid, "trade_volume", i, "kurt")] = skews[3];
+
+          data[field_name(pid, "trade_avg_price", i, "avg")] = means[8];
+          data[field_name(pid, "trade_avg_price", i, "std")] = vars[5];
+          data[field_name(pid, "trade_avg_price", i, "skew")] = skews[4];
+          data[field_name(pid, "trade_avg_price", i, "kurt")] = skews[5];
+
+          data[field_name(pid, "trade_return", i, "sum")] = means[13];
+          data[field_name(pid, "trade_return", i, "std")] = vars[7];
+          data[field_name(pid, "trade_return", i, "skew")] = skews[6];
+          data[field_name(pid, "trade_return", i, "kurt")] = skews[7];
+        }
+        if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
+        for (const Trade& trade : pid_data.mTrades[cur_idx])
+          trades.push_back(trade);
+      }
+    }
     {
       s::vector<s::array<double, 3>> output = linear_regress_trade_price_multi_k(pid_data.mTrades, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){
@@ -1265,7 +1366,6 @@ protected:
         data[field_name(pid, "trade_price_rmse", mTradeLengths[i], "")]  = output[i][2];
       }
     }
-
   }
 
   double rolling_mean_return(uint64 idx, uint64 timestamp, uint64 length){
@@ -1910,55 +2010,46 @@ protected:
       for (uint64 i = 0; i < mTradeLengths.size(); ++i)
         data[field_name(pid, "trade_buy_sell_diff", mTradeLengths[i], "avg")] = means[i][0];
     }
-    //TODO: wrong, we can do better with the raw trades
     {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeSize, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeSize, means, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeSize, means, vars, idx, timestamp, mTradeLengths, true);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_size", mTradeLengths[i], "sum")] = means[i][1];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_size", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
-    //TODO: wrong, we can do better with the raw trades
-    {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeVolume, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeVolume, means, idx, timestamp, mTradeLengths, true);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeVolume, means, vars, idx, timestamp, mTradeLengths, true);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "sum")] = means[i][1];
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_volume", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
-    //TODO: wrong, we can do better with the raw trades
-    {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeAvgPrice, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeAvgPrice, means, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeAvgPrice, means, vars, idx, timestamp, mTradeLengths);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "avg")]  = means[i][0];
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "std")]  = vars[i][1];
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_avg_price", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
-    //TODO: wrong, we can do better after the raw trades are computed
-    {
-      s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mTradeReturn, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mTradeReturn, means, idx, timestamp, mTradeLengths);
-      s::vector<s::array<double, 2>> skews = rolling_skew_kurt_multi_k(pid_data.mTradeReturn, means, vars, idx, timestamp, mTradeLengths);
-      for (uint64 i = 0; i < mTradeLengths.size(); ++i){
-        data[field_name(pid, "trade_return", mTradeLengths[i], "sum")] = means[i][1];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "std")] = vars[i][1];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "skew")] = skews[i][0];
-        data[field_name(pid, "trade_return", mTradeLengths[i], "kurt")] = skews[i][1];
-      }
-    }
+      uint64 length_idx = 0;
+      uint64 max_length = mTradeLengths.back();
+      uint64 min_timestamp = timestamp - max_length;
+      s::vector<Trade> trades;
+      for (uint64 i = 0, cur_idx = idx; i < max_length + 1; ++i, cur_idx = prev_idx(cur_idx)){
+        if (i == mTradeLengths[length_idx]){
+          s::sort(s::begin(trades), s::end(trades), [](const Trade& a, const Trade& b){
+            return a.trade_id < b.trade_id;
+          });
 
+          s::array<double, 16> means = trades_avg_sum_max_min_size_volume_price(trades);
+          s::array<double, 8>  vars  = trades_var_std_size_volume_price(trades, means);
+          s::array<double, 8>  skews = trades_skew_kurt_size_volume_price(trades, means, vars);
+
+          data[field_name(pid, "trade_size", i, "sum")] = means[1];
+          data[field_name(pid, "trade_size", i, "std")] = vars[1];
+          data[field_name(pid, "trade_size", i, "skew")] = skews[0];
+          data[field_name(pid, "trade_size", i, "kurt")] = skews[1];
+
+          data[field_name(pid, "trade_volume", i, "sum")] = means[5];
+          data[field_name(pid, "trade_volume", i, "std")] = vars[3];
+          data[field_name(pid, "trade_volume", i, "skew")] = skews[2];
+          data[field_name(pid, "trade_volume", i, "kurt")] = skews[3];
+
+          data[field_name(pid, "trade_avg_price", i, "avg")] = means[8];
+          data[field_name(pid, "trade_avg_price", i, "std")] = vars[5];
+          data[field_name(pid, "trade_avg_price", i, "skew")] = skews[4];
+          data[field_name(pid, "trade_avg_price", i, "kurt")] = skews[5];
+
+          data[field_name(pid, "trade_return", i, "sum")] = means[13];
+          data[field_name(pid, "trade_return", i, "std")] = vars[7];
+          data[field_name(pid, "trade_return", i, "skew")] = skews[6];
+          data[field_name(pid, "trade_return", i, "kurt")] = skews[7];
+        }
+        if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
+        for (const Trade& trade : pid_data.mTrades[cur_idx])
+          trades.push_back(trade);
+      }
+    }
     {
       s::vector<s::array<double, 3>> output = linear_regress_trade_price_multi_k(pid_data.mTrades, idx, timestamp, mTradeLengths);
       for (uint64 i = 0; i < mTradeLengths.size(); ++i){

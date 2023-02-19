@@ -1,0 +1,14 @@
+[Unit]
+Description=cbp-trade-1-monitor
+After=network.target
+
+[Service]
+WorkingDirectory=/home/armandli/cbp-recorder
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && trade_monitor --exchange trade_exchange_1 --logfile monitor.log'
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/home/armandli/cbp-recorder/monitor_io.log
+StandardError=inherit
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

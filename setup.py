@@ -37,7 +37,8 @@ setup(
       'prometheus-client',
       's3cmd',
       'jupyter',
-      'lightgbm',
+      'xgboost',
+      'optuna',
       'shap',
       'matplotlib',
       'tqdm',
@@ -59,6 +60,8 @@ setup(
         'prediction_etl_s2 = senseis.pipe.prediction_etl_s2:main',
         'candle_backfiller = senseis.backfiller.candle_backfiller:main',
         'combine_dataset = senseis.training.combine_dataset:main',
+        'book_monitor = senseis.monitor.book_monitor:main',
+        'trade_monitor = senseis.monitor.trade_monitor:main',
         'printer = senseis.subscriber.printer:main',
     ]
   },
