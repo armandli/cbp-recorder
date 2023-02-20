@@ -42,7 +42,7 @@ def build_parser():
   return parser
 
 HIST_SIZE = 1920
-MAX_WAIT_SECONDS = 360
+MAX_WAIT_SECONDS = 920
 
 class ETLS2State(ETLState):
   def __init__(self):

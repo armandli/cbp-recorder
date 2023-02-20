@@ -30,7 +30,7 @@ def get_trade_size_gauges():
 
 def create_trade_volume_gauges(app_name, pids):
   global TRADE_VOLUME_GAUGES
-  TRADE_VOLUME_GAUGES = {pid : Gauge(app_name + "_" + pid.replace('-','_') + "last_trade_volume", "{} last trade volume".format(pid), registry=get_collector_registry()) for pid in pids}
+  TRADE_VOLUME_GAUGES = {pid : Gauge(app_name + "_" + pid.replace('-','_') + "_last_trade_volume", "{} last trade volume".format(pid), registry=get_collector_registry()) for pid in pids}
 
 def get_trade_volume_gauges():
   return TRADE_VOLUME_GAUGES

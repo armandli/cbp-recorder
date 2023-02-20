@@ -41,12 +41,28 @@ def create_best_ask_size_gauges(app_name, pids):
 def get_best_ask_size_gauges():
   return BEST_ASK_SIZE_GAUGES
 
+def create_best_bid_volume_gauges(app_name, pids):
+  global BEST_BID_VOLUME_GAUGES
+  BEST_BID_VOLUME_GAUGES = {pid : Gauge(app_name + "_" + pid.replace('-','_') + '_best_bid_volume', "{} best bid volume".format(pid), registry=get_collector_registry()) for pid in pids}
+
+def get_best_bid_volume_gauges():
+  return BEST_BID_VOLUME_GAUGES
+
+def create_best_ask_volume_gauges(app_name, pids):
+  global BEST_ASK_VOLUME_GAUGES
+  BEST_ASK_VOLUME_GAUGES = {pid : Gauge(app_name + "_" + pid.replace('-','_') + '_best_ask_volume', "{} best ask volume".format(pid), registry=get_collector_registry()) for pid in pids}
+
+def get_best_ask_volume_gauges():
+  return BEST_ASK_VOLUME_GAUGES
+
 def book_monitor(data, exchange_name):
   pids = get_exchange_pids(exchange_name)
   bpgs = get_best_bid_price_gauges()
   apgs = get_best_ask_price_gauges()
   bsgs = get_best_bid_size_gauges()
   asgs = get_best_ask_size_gauges()
+  bvgs = get_best_bid_volume_gauges()
+  avgs = get_best_ask_volume_gauges()
   for pid in pids:
     pid_data = json.loads(data[pid])
     if not pid_data:
@@ -57,12 +73,14 @@ def book_monitor(data, exchange_name):
         try:
           bpgs[pid].set(float(bids[0][0]))
           bsgs[pid].set(float(bids[0][1]))
+          bvgs[pid].set(float(bids[0][0]) * float(bids[0][1]))
         except ValueError:
           logging.info("Detected invalid bids value in pid {} data: {}".format(pid, pid_data))
       elif isinstance(bids[0], int) and len(bids) > 1 and isinstance(bids[1], list):
         try:
           bpgs[pid].set(float(bids[1][0]))
           bsgs[pid].set(float(bids[1][1]))
+          bvgs[pid].set(float(bids[1][0]) * float(bids[1][1]))
         except ValueError:
           logging.info("Detected invalid bids value in pid {} data: {}".format(pid, pid_data))
     if 'asks' in pid_data and len(pid_data['asks']) > 0:
@@ -71,12 +89,14 @@ def book_monitor(data, exchange_name):
         try:
           apgs[pid].set(float(asks[0][0]))
           asgs[pid].set(float(asks[0][1]))
+          avgs[pid].set(float(asks[0][0]) * float(asks[0][1]))
         except ValueError:
           logging.info("Detected invalid asks value in pid {} data: {}".format(pid, pid_data))
       elif isinstance(asks[0], int) and len(asks) > 1 and isinstance(asks[1], list):
         try:
           apgs[pid].set(float(asks[1][0]))
           asgs[pid].set(float(asks[1][1]))
+          avgs[pid].set(float(asks[1][0]) * float(asks[1][1]))
         except ValueError:
           logging.info("Detected invalid asks value in pid {} data: {}".format(pid, pid_data))
   push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())

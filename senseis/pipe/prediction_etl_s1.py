@@ -27,7 +27,7 @@ from senseis.metric_utility import get_live_gauge
 from senseis.metric_utility import create_etl_process_time_histogram
 
 HIST_SIZE = 1920
-MAX_WAIT_SECONDS = 480
+MAX_WAIT_SECONDS = 920
 
 def build_parser():
   parser = argparse.ArgumentParser(description="parameters")

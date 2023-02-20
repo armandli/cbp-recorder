@@ -62,6 +62,7 @@ setup(
         'combine_dataset = senseis.training.combine_dataset:main',
         'book_monitor = senseis.monitor.book_monitor:main',
         'trade_monitor = senseis.monitor.trade_monitor:main',
+        'prediction_etl_s2_monitor = senseis.monitor.prediction_etl_s2_monitor:main',
         'printer = senseis.subscriber.printer:main',
     ]
   },

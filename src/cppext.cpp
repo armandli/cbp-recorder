@@ -1217,6 +1217,7 @@ struct ETLS1State : public ETLState {
 
       data[field_name(pid, "book_beta", 648, "")] = rolling_beta(pid_data.mBookReturn, idx, timestamp, 648);
 
+      //TODO: trade volatility calculation may not be great
       s::vector<double> trade_volatility = rolling_volatility_multi_k(pid_data.mTradeReturn, idx, timestamp, mReturnLengths);
       for (uint64 i = 0; i < trade_volatility.size(); ++i)
         data[field_name(pid, "trade_volatility", mReturnLengths[i], "")] = trade_volatility[i];
@@ -1353,6 +1354,8 @@ protected:
           data[field_name(pid, "trade_return", i, "std")] = vars[7];
           data[field_name(pid, "trade_return", i, "skew")] = skews[6];
           data[field_name(pid, "trade_return", i, "kurt")] = skews[7];
+
+          length_idx++;
         }
         if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
         for (const Trade& trade : pid_data.mTrades[cur_idx])
@@ -1769,6 +1772,7 @@ struct ETLS2State : public ETLState {
 
       data[field_name(pid, "book_beta", 648, "")] = rolling_beta(pid_data.mBookReturn, idx, timestamp, 648);
 
+      //TODO: could improve calculation
       s::vector<double> trade_volatility = rolling_volatility_multi_k(pid_data.mTradeReturn, idx, timestamp, mReturnLengths);
       for (uint64 i = 0; i < trade_volatility.size(); ++i)
         data[field_name(pid, "trade_volatility", mReturnLengths[i], "")] = trade_volatility[i];
@@ -1936,6 +1940,7 @@ protected:
         data[field_name(pid, "ask_level_rmse", mBookLengths[i], "std")] = vars[i][1];
       }
     }
+    //TODO: maybe this is not needed anymore
     {
       s::vector<s::array<double, 4>> means = rolling_avg_sum_max_min_multi_k(pid_data.mBookBidAskImbalance, idx, timestamp, mBookLengths);
       s::vector<s::array<double, 2>> vars  = rolling_var_std_multi_k(pid_data.mBookBidAskImbalance, means, idx, timestamp, mBookLengths);
@@ -2044,6 +2049,8 @@ protected:
           data[field_name(pid, "trade_return", i, "std")] = vars[7];
           data[field_name(pid, "trade_return", i, "skew")] = skews[6];
           data[field_name(pid, "trade_return", i, "kurt")] = skews[7];
+
+          length_idx++;
         }
         if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;
         for (const Trade& trade : pid_data.mTrades[cur_idx])
