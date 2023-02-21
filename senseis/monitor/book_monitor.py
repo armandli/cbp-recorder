@@ -117,6 +117,8 @@ def main():
   create_best_ask_price_gauges(app_name, pids)
   create_best_bid_size_gauges(app_name, pids)
   create_best_ask_size_gauges(app_name, pids)
+  create_best_bid_volume_gauges(app_name, pids)
+  create_best_ask_volume_gauges(app_name, pids)
   try:
     asyncio.run(
       monitor_extraction(
