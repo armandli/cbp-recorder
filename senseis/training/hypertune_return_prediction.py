@@ -75,6 +75,7 @@ def wrmse_eval(predt: np.ndarray, dtrain: xgb.DMatrix) -> Tuple[str, float]:
 
 #TODO: make ranges program options
 def create_objective(XYTrain, XYTest, ntarget, trial):
+  logging.info("Running trial")
   param = {
       'verbosity': 0,
       'num_target': ntarget,
