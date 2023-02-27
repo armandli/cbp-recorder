@@ -79,7 +79,6 @@ def create_objective(XYTrain, XYTest, ntarget, trial):
       'verbosity': 0,
       'num_target': ntarget,
       'eta': trial.suggest_float('eta', 1e-8, 0.5, log=True),
-      'gamma': trial.suggest_int('gamma', 0, 100),
       'max_depth': trial.suggest_int('max_depth', 6, 50),
       'tree_method': trial.suggest_categorical('tree_method', ['hist', 'approx', 'exact']),
   }
