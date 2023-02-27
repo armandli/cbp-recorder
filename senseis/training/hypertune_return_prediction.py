@@ -74,10 +74,10 @@ def wrmse_eval(predt: np.ndarray, dtrain: xgb.DMatrix) -> Tuple[str, float]:
   return ('WRMSE', v)
 
 #TODO: make ranges program options
-def create_objective(XYTrain, XYTest, trial):
+def create_objective(XYTrain, XYTest, ntarget, trial):
   param = {
       'verbosity': 0,
-      'num_target': XYTrain.get_label().shape[1],
+      'num_target': ntarget,
       'eta': trial.suggest_float('eta', 1e-8, 0.5, log=True),
       'gamma': trial.suggest_int('gamma', 0, 100),
       'max_depth': trial.suggest_int('max_depth', 6, 50),
@@ -136,7 +136,7 @@ def main():
   X_train, Y_train, X_test, Y_test = ts_train_test_split(X, Y, args.pct)
   XYTrain = xgb.DMatrix(X_train, Y_train)
   XYTest = xgb.DMatrix(X_test, Y_test)
-  objective = partial(create_objective, XYTrain, XYTest)
+  objective = partial(create_objective, XYTrain, XYTest, Y.shape[1])
   study = optuna.create_study(direction='minimize')
   logging.info("Starting optimization")
   study.optimize(objective, n_trials=args.ntrials)
