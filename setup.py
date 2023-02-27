@@ -60,6 +60,7 @@ setup(
         'prediction_etl_s2 = senseis.pipe.prediction_etl_s2:main',
         'candle_backfiller = senseis.backfiller.candle_backfiller:main',
         'combine_dataset = senseis.training.combine_dataset:main',
+        'hypertune_return_prediction = senseis.training.hypertune_return_prediction:main',
         'book_monitor = senseis.monitor.book_monitor:main',
         'trade_monitor = senseis.monitor.trade_monitor:main',
         'prediction_etl_s2_monitor = senseis.monitor.prediction_etl_s2_monitor:main',

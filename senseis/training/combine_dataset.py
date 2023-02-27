@@ -17,7 +17,7 @@ utc = pytz.timezone("UTC")
 
 def build_parser():
   parser = argparse.ArgumentParser(description='parameters')
-  parser.add_argument('--file-prefix', type=str, help='filenam prefix', required=True)
+  parser.add_argument('--file-prefix', type=str, help='filename prefix', required=True)
   parser.add_argument('--dir', type=str, help='data file directory', default='../data')
   parser.add_argument('--output-filename-prefix', type=str, help='output filename prefix', required=True)
   parser.add_argument('--chunk-size', type=int, help='chunking size used during processing', default=16)

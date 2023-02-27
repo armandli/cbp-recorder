@@ -11,6 +11,43 @@ def compute_book_imbalance(cbprice, cbsize, caprice, casize, pbprice, pbsize, pa
   inba = ge_bid_price * cbsize - le_bid_price * pbsize + ge_ask_price * pasize - le_ask_price * casize
   return inba
 
+def compute_extended_book_imbalance(cbprices, cbsizes, caprices, casizes, pbprices, pbsizes, paprices, pasizes):
+  if not cbprices or not cbsizes or not caprices or not casizes or \
+     not pbprices or not pbsizes or not paprices or not pasizes:
+    return 0.
+  if len(cbprices) != len(cbsizes) or len(caprices) != len(casizes) or \
+     len(pbprices) != len(pbsizes) or len(paprices) != len(pasizes):
+    return 0.
+
+  ibsize = 0.
+  cidx = 0
+  while cidx < len(cbprices) and cbprices[cidx] > pbprices[0]:
+    ibsize += cbsizes[cidx]
+    cidx += 1
+  dbsize = 0.
+  pidx = 0
+  while pidx < len(pbprices) and pbprices[pidx] > cbprices[0]:
+    dbsize += pbsizes[pidx]
+    pidx += 1
+  bimbalance = ibsize - dbsize
+  if cidx < len(cbprices) and pidx < len(pbprices) and cbprices[cidx] == pbprices[pidx]:
+    bimbalance += (cbsizes[cidx] - pbsizes[pidx])
+
+  dasize = 0.
+  cidx = 0
+  while cidx < len(caprices) and caprices[cidx] < paprices[0]:
+    dasize += casizes[cidx]
+    cidx += 1
+  iasize = 0.
+  pidx = 0
+  while pidx < len(paprices) and paprices[pidx] < caprices[0]:
+    iasize += pasizes[pidx]
+    pidx += 1
+  aimbalance = iasize - dasize
+  if cidx < len(caprices) and pidx < len(paprices) and caprices[cidx] == paprices[pidx]:
+    aimbalance += (pasizes[pidx] - casizes[cidx])
+  return bimbalance + aimbalance
+
 def compute_weighted_average_price(bprice, bsize, aprice, asize):
   if bsize + asize == 0:
     return float("nan")

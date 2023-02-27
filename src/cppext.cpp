@@ -504,6 +504,7 @@ struct ETLState {
   }
 
 protected:
+  //TODO: check the formula for counting when skipping by timestamp
   template <typename T>
   s::vector<s::array<double, 4>> rolling_avg_sum_max_min_multi_k(const s::array<T, HIST_SIZE>& data, uint64 idx, uint64 timestamp, const s::vector<uint64>& lengths, bool count_nan=false){
     s::vector<s::array<double, 4>> ret; ret.reserve(lengths.size());
