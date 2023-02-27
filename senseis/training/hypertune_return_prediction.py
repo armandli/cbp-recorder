@@ -90,7 +90,7 @@ def create_objective(XYTrain, XYTest, ntarget, trial):
       num_boost_round=rounds,
       obj=wmse_loss,
   )
-  Y_predict = model.inplace_predict(X_test)
+  Y_predict = model.inplace_predict(XYTest.get_data())
   _, loss = wrmse_eval(Y_predict, XYTest)
   return loss
 
