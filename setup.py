@@ -10,6 +10,7 @@ ext_modules = [
     Pybind11Extension(
         "cppext",
         sorted(glob("src/*.cpp")) + sorted(glob("src/*.cc")),
+        cxx_std=17,
     ),
 ]
 

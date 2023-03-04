@@ -127,7 +127,15 @@ j::error_code parse_double(double& out, j::ondemand::value value){
     else if (sv == "nan")
       out = FNAN;
     else
+// cannot use from_chars on apple platform
+#ifndef __APPLE__
       s::from_chars(s::begin(sv), s::end(sv), out);
+#else
+      {
+      char* end = nullptr;
+      out = s::strtod(s::begin(sv), &end);
+    }
+#endif
   }
   break; case j::ondemand::json_type::number: {
     j::ondemand::number number = value.get_number();
@@ -162,7 +170,15 @@ j::error_code parse_uint(uint64& out, j::ondemand::value value){
     else if (s == "min")
       out = IMIN;
     else
+// cannot use from_chars on apple platform
+#ifndef __APPLE__
       s::from_chars(s::begin(sv), s::end(sv), out);
+#else
+      {
+      char* end = nullptr;
+      out = s::strtoll(s::begin(sv), &end, 10);
+    }
+#endif
   }
   break; case j::ondemand::json_type::number: {
     j::ondemand::number number = value.get_number();
@@ -621,9 +637,9 @@ protected:
       uint64 k = lengths[i];
       if (not isnan(cache[i])){
         double ema = (1. / k) * val + (1. - (1. - k)) * cache[i];
-        ret.push_back(s::array<double, 2>(ema, ema * k));
+        ret.push_back(s::array<double, 2>{ema, ema * k});
       } else
-        ret.push_back(s::array<double, 2>(val, val * k));
+        ret.push_back(s::array<double, 2>{val, val * k});
     }
     return ret;
   }
@@ -636,9 +652,9 @@ protected:
       uint64 k = lengths[i];
       if (not isnan(cache[i])){
         double ema = (1. / k) * val + (1. - (1. - k)) * cache[i];
-        ret.push_back(s::array<double, 2>(ema, ema * k));
+        ret.push_back(s::array<double, 2>{ema, ema * k});
       } else
-        ret.push_back(s::array<double, 2>(val, val * k));
+        ret.push_back(s::array<double, 2>{val, val * k});
     }
     return ret;
   }
@@ -651,9 +667,9 @@ protected:
       uint64 k = lengths[i];
       if (not isnan(cache[i])){
         double ema = (1. / k) * val + (1. - (1. - k)) * abs(cache[i]);
-        ret.push_back(s::array<double, 2>(ema, ema * k));
+        ret.push_back(s::array<double, 2>{ema, ema * k});
       } else
-        ret.push_back(s::array<double, 2>(val, val * k));
+        ret.push_back(s::array<double, 2>{val, val * k});
     }
     return ret;
   }
