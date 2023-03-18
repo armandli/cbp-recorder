@@ -11,6 +11,13 @@ import optuna
 
 from senseis.utility import setup_logging
 
+TRIAL_NO=0
+
+def get_trial_no():
+  r = TRIAL_NO
+  TRAIL_NO += 1
+  return r
+
 def build_parser():
   parser = argparse.ArgumentParser(description='')
   parser.add_argument('--file-prefix', type=str, help='filename prefix', required=True)
@@ -75,7 +82,7 @@ def wrmse_eval(predt: np.ndarray, dtrain: xgb.DMatrix) -> Tuple[str, float]:
 
 #TODO: make ranges program options
 def create_objective(XYTrain, XYTest, ntarget, trial):
-  logging.info("Running trial")
+  logging.info("Running trial {}".format(get_trial_no()))
   param = {
       'verbosity': 0,
       'num_target': ntarget,

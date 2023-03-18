@@ -38,6 +38,7 @@ constexpr double FINF = s::numeric_limits<double>::infinity();
 constexpr uint64 IMAX = s::numeric_limits<uint64>::max();
 constexpr uint64 IMIN = s::numeric_limits<uint64>::min();
 constexpr char STIME_COLNAME[] = "sequence_time";
+constexpr char STIME_INTERVAL[] = "sequence_interval_s";
 constexpr char DATETIME_FORMAT[] = "%Y-%m-%dT%H:%M:%S %Z";
 constexpr char OUTPUT_DATETIME_FORMAT[] = "%Y-%m-%dT%H:%M:%S.000000 %Z"; //TODO: hack, because we only print epoch in seconds, this is okay
 
@@ -1242,6 +1243,9 @@ struct ETLS1State : public ETLState {
 
     data["book_mean_return_27"] = mBookMeanReturn27[idx];
 
+    uint64 pidx = prev_idx(idx);
+    data[STIME_INTERVAL] = mTimestamps[idx] - mTimestamps[pidx];
+
     return data;
   }
 protected:
@@ -1797,6 +1801,9 @@ struct ETLS2State : public ETLState {
 
     data["book_mean_return_27"] = mBookMeanReturn27[idx];
 
+    uint64 pidx = prev_idx(idx);
+    data[STIME_INTERVAL] = mTimestamps[idx] - mTimestamps[pidx];
+
     return data;
   }
 
@@ -2119,7 +2126,7 @@ protected:
     uint64 length_idx = 0;
     for (uint64 i = 0, cur_idx = idx; i < max_length + 1; i++, cur_idx = prev_idx(cur_idx)){
       if (i == lengths[length_idx]){
-        ret.push_back(sum);
+        ret.push_back(sum / double(i));
         length_idx++;
       }
       if (mTimestamps[cur_idx] > timestamp or mTimestamps[cur_idx] <= min_timestamp) continue;

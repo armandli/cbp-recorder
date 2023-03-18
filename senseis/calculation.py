@@ -64,8 +64,7 @@ def compute_bidask_spread(bid_price, ask_price):
   return (ask_price - bid_price) / ask_price
 
 def compute_volatility(returns):
-  #TODO: still not sure if it's right
-  return math.sqrt(sum([r**2 for r in returns if not math.isnan(r)]))
+    return math.sqrt(sum([r**2 for r in returns if not math.isnan(r)]) / float(len(returns)))
 
 def compute_book_avg_tick(prices):
   if len(prices) < 2:

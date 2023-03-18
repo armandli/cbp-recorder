@@ -419,7 +419,7 @@ class ETLState(ABC):
     ret = []
     for i in range(max(lengths) + 1):
       if i == lengths[length_idx]:
-        ret.append(s)
+        ret.append(s / float(i))
         length_idx += 1
       if self.timestamps[(idx - i) % self.hist_size()] is None or \
          self.timestamps[(idx - i) % self.hist_size()] > timestamp or \
@@ -427,6 +427,5 @@ class ETLState(ABC):
         continue
       if not math.isnan(data[(idx - i) % self.hist_size()]):
         s += data[(idx - i) % self.hist_size()] ** 2
-    #TODO: volatility may still not be right
     return [math.sqrt(r) for r in ret]
 
