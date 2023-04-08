@@ -214,6 +214,7 @@ double compute_book_avg_tick(const s::vector<double>& prices){
   return s / double(count);
 }
 
+//TODO: bug in algorithm
 double compute_bid_size_change(const s::vector<double>& cp, const s::vector<double>& cs, const s::vector<double>& pp, const s::vector<double>& ps){
   if (cp.size() == 0 or cs.size() == 0 or pp.size() == 0 or ps.size() == 0) return 0.;
   if (cp.size() != cs.size() or pp.size() != ps.size()) return 0.;
@@ -237,6 +238,7 @@ double compute_bid_size_change(const s::vector<double>& cp, const s::vector<doub
   return sc;
 }
 
+//TODO: bug in algorithm
 double compute_ask_size_change(const s::vector<double>& cp, const s::vector<double>& cs, const s::vector<double>& pp, const s::vector<double>& ps){
   if (cp.size() == 0 or cs.size() == 0 or pp.size() == 0 or ps.size() == 0) return 0.;
   if (cp.size() != cs.size() or pp.size() != ps.size()) return 0.;
@@ -260,6 +262,7 @@ double compute_ask_size_change(const s::vector<double>& cp, const s::vector<doub
   return sc;
 }
 
+//TODO: bug in algorithm
 double compute_bid_volume_change(const s::vector<double>& cp, const s::vector<double>& cs, const s::vector<double>& pp, const s::vector<double>& ps){
   if (cp.size() == 0 or cs.size() == 0 or pp.size() == 0 or ps.size() == 0) return 0.;
   if (cp.size() != cs.size() or pp.size() != ps.size()) return 0.;
@@ -283,6 +286,7 @@ double compute_bid_volume_change(const s::vector<double>& cp, const s::vector<do
   return vc;
 }
 
+//TODO: bug in algorithm
 double compute_ask_volume_change(const s::vector<double>& cp, const s::vector<double>& cs, const s::vector<double>& pp, const s::vector<double>& ps){
   if (cp.size() == 0 or cs.size() == 0 or pp.size() == 0 or ps.size() == 0) return 0.;
   if (cp.size() != cs.size() or pp.size() != ps.size()) return 0.;
@@ -1223,8 +1227,6 @@ struct ETLS1State : public ETLState {
       data[field_name(pid, "trade_buy_sell_diff")] = pid_data.mTradeBuySellDiff[idx];
       data[field_name(pid, "trade_volume")]     =    pid_data.mTradeVolume[idx];
       data[field_name(pid, "trade_size")]       =    pid_data.mTradeSize[idx];
-      data[field_name(pid, "trade_avg_price")]  =    pid_data.mTradeAvgPrice[idx];
-      data[field_name(pid, "trade_return")]     =    pid_data.mTradeReturn[idx];
 
       produce_book_output_rolling_multi_k(data, pid, idx, timestamp);
       produce_trade_output_rolling_multi_k(data, pid, idx, timestamp);
@@ -1244,7 +1246,10 @@ struct ETLS1State : public ETLState {
     data["book_mean_return_27"] = mBookMeanReturn27[idx];
 
     uint64 pidx = prev_idx(idx);
-    data[STIME_INTERVAL] = mTimestamps[idx] - mTimestamps[pidx];
+    if (mTimestamps[pidx] != 0)
+      data[STIME_INTERVAL] = mTimestamps[idx] - mTimestamps[pidx];
+    else
+      data[STIME_INTERVAL] = 0; // can only be 0 if it doesn't have a interval
 
     return data;
   }
@@ -1781,8 +1786,6 @@ struct ETLS2State : public ETLState {
       data[field_name(pid, "trade_buy_sell_diff")] = pid_data.mTradeBuySellDiff[idx];
       data[field_name(pid, "trade_volume")]     =    pid_data.mTradeVolume[idx];
       data[field_name(pid, "trade_size")]       =    pid_data.mTradeSize[idx];
-      data[field_name(pid, "trade_avg_price")]  =    pid_data.mTradeAvgPrice[idx];
-      data[field_name(pid, "trade_return")]     =    pid_data.mTradeReturn[idx];
 
       produce_book_output_rolling_multi_k(data, pid, idx, timestamp);
       produce_trade_output_rolling_multi_k(data, pid, idx, timestamp);
@@ -1802,7 +1805,10 @@ struct ETLS2State : public ETLState {
     data["book_mean_return_27"] = mBookMeanReturn27[idx];
 
     uint64 pidx = prev_idx(idx);
-    data[STIME_INTERVAL] = mTimestamps[idx] - mTimestamps[pidx];
+    if (mTimestamps[pidx] != 0)
+      data[STIME_INTERVAL] = mTimestamps[idx] - mTimestamps[pidx];
+    else
+      data[STIME_INTERVAL] = 0; //can only have 0 if it is the first interval
 
     return data;
   }

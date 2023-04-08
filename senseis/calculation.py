@@ -83,6 +83,7 @@ def compute_book_first_tick(prices):
     return 0.
   return abs(prices[0] - prices[1])
 
+#TODO: there is a bug in this algorithm
 def compute_bid_size_change(cbprices, cbsizes, pbprices, pbsizes):
   if len(cbprices) == 0 or len(cbsizes) == 0 or len(pbprices) == 0 or len(pbsizes) == 0:
     return 0.
@@ -107,6 +108,7 @@ def compute_bid_size_change(cbprices, cbsizes, pbprices, pbsizes):
         break
   return sc
 
+#TODO: there is a bug in this algorithm
 def compute_ask_size_change(caprices, casizes, paprices, pasizes):
   if len(caprices) == 0 or len(casizes) == 0 or len(paprices) == 0 or len(pasizes) == 0:
     return 0.
@@ -131,6 +133,7 @@ def compute_ask_size_change(caprices, casizes, paprices, pasizes):
         break
   return sc
 
+#TODO: there is a bug in this algorithm
 def compute_bid_volume_change(cbprices, cbsizes, pbprices, pbsizes):
   if len(cbprices) == 0 or len(cbsizes) == 0 or len(pbprices) == 0 or len(pbsizes) == 0:
     return 0.
@@ -155,6 +158,7 @@ def compute_bid_volume_change(cbprices, cbsizes, pbprices, pbsizes):
         break
   return vc
 
+#TODO: there is a bug in this algorithm
 def compute_ask_volume_change(caprices, casizes, paprices, pasizes):
   if len(caprices) == 0 or len(casizes) == 0 or len(paprices) == 0 or len(pasizes) == 0:
     return 0.

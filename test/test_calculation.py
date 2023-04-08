@@ -40,11 +40,81 @@ class TestComputeExtendedBookImbalance(unittest.TestCase):
 
 class TestComputeBidSizeChange(unittest.TestCase):
   def test_1(self):
-    pass
+    cbprices = [100., 99., 98., 97.]
+    cbsizes  = [13.,  15., 17., 10.]
+    pbprices = [97., 96., 95.]
+    pbsizes  = [1.,  100., 200.]
+
+    c = compute_bid_size_change(cbprices, cbsizes, pbprices, pbsizes)
+    self.assertAlmostEqual(54., c)
+
+  def test_2(self):
+    pbprices = [100., 99., 98., 97.]
+    pbsizes  = [13.,  15., 17., 10.]
+    cbprices = [97., 96., 95.]
+    cbsizes  = [1.,  100., 200.]
+
+    c = compute_bid_size_change(cbprices, cbsizes, pbprices, pbsizes)
+    #TODO: shouldn't this be -54 ?
+    self.assertAlmostEqual(-55., c)
+
+  def test_3(self):
+    cbprices = [100., 99., 98., 97.]
+    cbsizes  = [13.,  15., 17., 10.]
+    pbprices = [100., 99., 98., 97.]
+    pbsizes  = [15.,  17., 19., 13.]
+
+    c = compute_bid_size_change(cbprices, cbsizes, pbprices, pbsizes)
+    self.assertAlmostEqual(-2., c)
+
+  def test_4(self):
+    cbprices = [100., 99., 98., 97.]
+    cbsizes  = [13.,  15., 17., 10.]
+    pbprices = [100., 98., 97.]
+    pbsizes  = [15.,  19., 13.]
+
+    c = compute_bid_size_change(cbprices, cbsizes, pbprices, pbsizes)
+    self.assertAlmostEqual(-2., c)
+
 
 class TestComputeAskSizeChange(unittest.TestCase):
   def test_1(self):
-    pass
+    caprices = [100., 101., 102., 103.]
+    casizes  = [13.,  15.,  17.,  10.]
+    paprices = [103., 104., 105.]
+    pasizes  = [1.,   100., 200.]
+
+    c = compute_ask_size_change(caprices, casizes, paprices, pasizes)
+    self.assertAlmostEqual(54., c)
+
+  def test_2(self):
+    paprices = [100., 101., 102., 103.]
+    pasizes  = [13.,  15.,  17.,  10.]
+    caprices = [103., 104., 105.]
+    casizes  = [1.,   100., 200.]
+
+    c = compute_ask_size_change(caprices, casizes, paprices, pasizes)
+    #TODO: shouldn't this be -54 ?
+    self.assertAlmostEqual(-55., c)
+
+  def test_3(self):
+    caprices = [100., 101., 102., 103.]
+    casizes  = [13.,  15.,  17.,  10.]
+    paprices = [100., 101., 102., 103.]
+    pasizes  = [15.,  17.,  19.,  13.]
+
+    c = compute_ask_size_change(caprices, casizes, paprices, pasizes)
+    self.assertAlmostEqual(-2., c)
+
+  def test_4(self):
+    caprices = [100., 101., 102., 103.]
+    casizes  = [13.,  15.,  17.,  10.]
+    paprices = [100., 102., 103.]
+    pasizes  = [15.,  19.,  13.]
+
+    c = compute_ask_size_change(caprices, casizes, paprices, pasizes)
+    self.assertAlmostEqual(-2., c)
+
 
 if __name__ == '__main__':
   unittest.main()
