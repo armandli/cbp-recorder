@@ -65,6 +65,7 @@ OUTPATHS = {
     "etl_exchange_s1" : "etl-s1",
     "etl_exchange_s2" : "etl-s2",
     "ETHUSD_multi_volatility_peachone" : "ETHUSD-multi-volatility-peachone",
+    "BTCUSD_multi_volatility_peachone" : "BTCUSD-multi-volatility-peachone",
 }
 
 STIME_COLNAME = 'sequence_time'
