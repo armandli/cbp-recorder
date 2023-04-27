@@ -1,7 +1,6 @@
 import argparse
 import logging
 import math
-import json
 import asyncio
 
 from prometheus_client import push_to_gateway

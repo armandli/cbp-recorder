@@ -155,6 +155,45 @@ async def etl_consumer_producer(
       get_restarted_counter().inc()
       push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
+async def multi_monitor_extraction(subscriber_f, extraction_f, monitor_f, exchange_names):
+  while True:
+    tasks = []
+    try:
+      que = asyncio.Queue()
+      tasks.append(asyncio.create_task(extraction_f(monitor_f, que)))
+      for exchange_name in exchange_names:
+        tasks.append(asyncio.create_task(subscriber_f(exchange_name, que)))
+      await asyncio.gather(*tasks, return_exceptions=False)
+      await que.join()
+    except asyncio.CancelledError as err:
+      logging.info("Cancelled Error {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_counter().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    except SocketError as err:
+      logging.info("Socket Error: {}".format(err))
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+      logging.info("Restarting")
+      get_restarted_counter().inc()
+      push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+
+async def multi_extraction_monitor(monitor_f, que):
+  while True:
+    ie_name, msg = await que.get()
+    dat = json.loads(msg)
+    cur_epoch = int(datetime.strptime(dat[STIME_COLNAME], DATETIME_FORMAT).timestamp())
+    epoch_interval = get_interval(cur_epoch)
+    get_interval_gauge().set(epoch_interval)
+    push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
+    logging.info(f"Received {cur_epoch} from {ie_name}")
+    monitor_f(dat, ie_name)
+    que.task_done()
+
 class ETLState(ABC):
   def __init__(self):
     self.timestamps = None

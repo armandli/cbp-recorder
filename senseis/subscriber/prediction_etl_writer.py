@@ -7,7 +7,7 @@ import asyncio
 
 from senseis.configuration import DATETIME_FORMAT
 from senseis.configuration import STIME_COLNAME
-from senseis.configuration import is_etl_exchange_name, get_s3_bucket, get_s3_outpath
+from senseis.configuration import is_etl_exchange_name, is_pred_exchange_name, get_s3_bucket, get_s3_outpath
 from senseis.utility import setup_logging, build_subscriber_parser
 from senseis.extraction_producer_consumer import consume_extraction, extraction_subscriber, extraction_writer
 from senseis.extraction_producer_consumer import create_interval_state
@@ -32,8 +32,8 @@ def main():
   parser = build_subscriber_parser()
   args = parser.parse_args()
   setup_logging(args)
-  if not is_etl_exchange_name(args.exchange):
-    logging.error("Invalid ETL exchange name. exist")
+  if not is_etl_exchange_name(args.exchange) and not is_pred_exchange_name(args.exchange):
+    logging.error("Invalid ETL exchange name. exit")
     return
   s3bucket = get_s3_bucket(args.exchange)
   s3outdir = get_s3_outpath(args.exchange)
