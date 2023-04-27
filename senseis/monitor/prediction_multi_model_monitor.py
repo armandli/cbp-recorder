@@ -24,7 +24,7 @@ def create_multi_volatility_prediction_gauges(app_name, exchanges, config_file):
   global MULTI_VOLATILITY_PREDICTION_GAUGES
 
   pids = [get_pred_exchange_pid(exchange) for exchange in exchanges if is_multi_volatility_pred_exchange(exchange)]
-  call_signs = [get_pred_exchange_call_sign(exchange) for exchange in exchanges if is_multi_volatility_pred_exchange(exchange)]
+  call_signs = set([get_pred_exchange_call_sign(exchange) for exchange in exchanges if is_multi_volatility_pred_exchange(exchange)])
   with open(config_file, 'r', transport_params=dict(client=s3_client)) as fd:
     config = json.load(fd)
   target_names = [target['target_name'] for target in config['targets']]
