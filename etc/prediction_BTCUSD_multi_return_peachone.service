@@ -1,0 +1,14 @@
+[Unit]
+Description=cbp-prediction-BTCUSD-multi-return-peachone
+After=network.target
+
+[Service]
+WorkingDirectory=/home/armandli/cbp-recorder
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder/ && source ./env/bin/activate && prediction_torch_s1 --exchange BTCUSD_multi_return_peachone --model-key BTCUSD_multi_return_peachone --logfile prediction_BTCUSD_multi_return_peachone.log'
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/home/armandli/cbp-recorder/prediction_BTCUSD_multi_return_peachone_io.log
+StandardError=inherit
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

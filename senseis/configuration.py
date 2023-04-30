@@ -44,7 +44,10 @@ TICKER_EXCHANGE_NAMES = ['ticker_exchange_0','ticker_exchange_1','ticker_exchang
 STAT_EXCHANGE_NAMES = ['stat_exchange_0','stat_exchange_1','stat_exchange_2']
 TRADE_EXCHANGE_NAMES = ['trade_exchange_0','trade_exchange_1','trade_exchange_2']
 ETL_EXCHANGE_NAMES = ['etl_exchange_s1','etl_exchange_s2']
-PRED_EXCHANGE_NAMES = ['ETHUSD_multi_volatility_peachone','BTCUSD_multi_volatility_peachone']
+PRED_EXCHANGE_NAMES = [
+    'ETHUSD_multi_volatility_peachone','BTCUSD_multi_volatility_peachone',
+    'ETHUSD_multi_return_peachone', 'BTCUSD_multi_return_peachone',
+]
 
 EXCHANGE_PIDS = [
     ['BTC-USD','ETH-USD','MKR-USD','BCH-USD','COMP-USD','AAVE-USD','UNI-USD','CRV-USD','BAL-USD','LTC-USD'],
@@ -65,7 +68,9 @@ OUTPATHS = {
     "etl_exchange_s1" : "etl-s1",
     "etl_exchange_s2" : "etl-s2",
     "ETHUSD_multi_volatility_peachone" : "ETHUSD-multi-volatility-peachone",
+    "ETHUSD_multi_return_peachone"     : "ETHUSD-multi-return-peachone",
     "BTCUSD_multi_volatility_peachone" : "BTCUSD-multi-volatility-peachone",
+    "BTCUSD_multi_return_peachone"     : "BTCUSD-multi-return-peachone",
 }
 
 STIME_COLNAME = 'sequence_time'
@@ -127,6 +132,9 @@ def is_pred_exchange_name(exchange_name):
 
 def is_multi_volatility_pred_exchange(exchange_name):
   return '_multi_volatility_' in exchange_name
+
+def is_multi_return_pred_exchange(exchange_name):
+  return '_multi_return_' in exchange_name
 
 def get_exchange_pids(exchange_name):
   idx = int(exchange_name.split('_')[2])

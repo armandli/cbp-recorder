@@ -49,7 +49,7 @@ def generate_regression_targets(data, ticker, targets):
   data = data.drop([data.index[k] for k in range(-1, -1 * (max_shift + 1), -1)])
   return (data, target_columns)
 
-def normalize_data(X_train, Y_train, X_test, Y_test):
+def normalize_regression_data(X_train, Y_train, X_test, Y_test):
   X_train_mean = X_train.mean(axis=0)
   X_train_std  = X_train.std(axis=0)
   X_train_std[X_train_std == 0.] = 1.
@@ -231,7 +231,7 @@ def main():
   X = np.float32(data[input_columns].to_numpy())
   Y = np.float32(data[target_columns].to_numpy())
   X_train, Y_train, X_test, Y_test = ts_train_test_split(X, Y, config['train_pct'])
-  X_train_norm, Y_train_norm, X_test_norm, Y_test_norm, normalization_params = normalize_data(X_train, Y_train, X_test, Y_test)
+  X_train_norm, Y_train_norm, X_test_norm, Y_test_norm, normalization_params = normalize_regression_data(X_train, Y_train, X_test, Y_test)
 
   logging.info(f"Training data size: {X_train.shape[0]} Eval data size: {X_test.shape[0]}")
   logging.info(f"Input dimension: {X_train.shape[1]} output dimension: {Y_train.shape[1]}")
