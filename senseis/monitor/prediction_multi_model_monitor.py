@@ -49,7 +49,7 @@ def get_volatility_prediction_gauges():
 def create_multi_return_prediction_gauges(app_name, exchanges, config_file):
   global MULTI_RETURN_PREDICTION_GAUGES
 
-  pids = [get_pred_exhcange_pid(exchange) for exchange in exchanges if is_multi_return_pred_exchange(exchange)]
+  pids = [get_pred_exchange_pid(exchange) for exchange in exchanges if is_multi_return_pred_exchange(exchange)]
   call_signs = set([get_pred_exchange_call_sign(exchange) for exchange in exchanges if is_multi_return_pred_exchange(exchange)])
   with open(config_file, 'r', transport_params=dict(client=s3_client)) as fd:
     config = json.load(fd)
