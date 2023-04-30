@@ -180,6 +180,8 @@ class TorchModel:
     model_filename = f"s3://{S3_BUCKET}/model/{v['ticker']}_{v['target']}_{v['target_dim']}_{v['model_type']}_{v['call_sign']}_{v['version']}_{v['start_epoch']}_{v['end_epoch']}.pt"
     model_metadata_filename = f"metadata/{v['ticker']}_{v['target']}_{v['target_dim']}_{v['model_type']}_{v['call_sign']}_metadata_{v['version']}_{v['start_epoch']}_{v['end_epoch']}.json.gzip"
 
+    logging.info(f"Using new model: {model_filename}")
+
     # we must load the metadata before the model because it contains some model information
     session = abcsession.get_session()
     try:
