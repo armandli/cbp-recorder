@@ -185,5 +185,7 @@ def get_s3_outpath(exchange_name):
     return OUTPATHS[exchange_name]
   elif 'multi_volatility_peachone' in exchange_name:
     return OUTPATHS[exchange_name]
+  elif 'multi_return_peachone' in exchange_name:
+    return OUTPATHS[exchange_name]
   else:
     assert(False)
