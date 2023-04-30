@@ -12,7 +12,7 @@ from senseis.configuration import S3_KEY, S3_SECRET, S3_ENDPOINT
 from senseis.utility import setup_logging
 from senseis.configuration import is_pred_exchange_name, get_pred_exchange_call_sign, get_pred_exchange_pid
 from senseis.configuration import is_multi_volatility_pred_exchange
-from senseis.configuration import is_return_volatility_pred_exchange
+from senseis.configuration import is_multi_return_pred_exchange
 from senseis.pipe_consumer_producer import multi_monitor_extraction, multi_extraction_monitor, data_subscriber
 from senseis.extraction_producer_consumer import create_interval_state
 from senseis.metric_utility import GATEWAY_URL
