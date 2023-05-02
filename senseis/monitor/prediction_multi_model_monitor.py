@@ -13,6 +13,7 @@ from senseis.utility import setup_logging
 from senseis.configuration import is_pred_exchange_name, get_pred_exchange_call_sign, get_pred_exchange_pid
 from senseis.configuration import is_multi_volatility_pred_exchange
 from senseis.configuration import is_multi_return_pred_exchange
+from senseis.configuration import is_multi_vdelta_pred_exchange
 from senseis.pipe_consumer_producer import multi_monitor_extraction, multi_extraction_monitor, data_subscriber
 from senseis.extraction_producer_consumer import create_interval_state
 from senseis.metric_utility import GATEWAY_URL
@@ -71,6 +72,30 @@ def create_multi_return_prediction_gauges(app_name, exchanges, config_file):
 def get_return_prediction_gauges():
   return MULTI_RETURN_PREDICTION_GAUGES
 
+def create_multi_vdelta_prediction_gauges(app_name, exchanges, config_file):
+  global MULTI_VDELTA_PREDICTION_GAUGES
+
+  pids = [get_pred_exchange_pid(exchange) for exchange in exchanges if is_multi_vdelta_pred_exchange(exchange)]
+  call_signs = set([get_pred_exchange_call_sign(exchange) for exchange in exchanges if is_multi_vdelta_pred_exchange(exchange)])
+  with open(config_file, 'r', transport_params=dict(client=s3_client)) as fd:
+    config = json.load(fd)
+  target_names = [target['target_name'] for target in config['targets']]
+
+  MULTI_VDELTA_PREDICTION_GAUGES = {
+    pid : {
+      call_sign : {
+        f"{pid}:{target_name}" : Gauge(f"{app_name}_{pid.replace('-','_')}_{target_name}",
+                                       f"{pid} {target_name}",
+                                       registry=get_collector_registry())
+      }
+      for call_sign in call_signs
+    }
+    for pid in pids
+  }
+
+def get_vdelta_prediction_gauges():
+  return MULTI_VDELTA_PREDICTION_GAUGES
+
 def model_monitor(data, exchange_name):
   pid = get_pred_exchange_pid(exchange_name)
   call_sign = get_pred_exchange_call_sign(exchange_name)
@@ -84,6 +109,11 @@ def model_monitor(data, exchange_name):
     for (key, val) in data.items():
       if key in gs[pid][call_sign]:
         gs[pid][call_sign][key].set(data[key])
+  elif is_multi_vdelta_pred_exchange(exchange_name):
+    gs = get_vdelta_prediction_gauges()
+    for (key, val) in data.items():
+      if key in gs[pid][call_sign]:
+        gs[pid][call_sign][key].set(data[key])
   push_to_gateway(GATEWAY_URL, job=get_job_name(), registry=get_collector_registry())
 
 def build_parser():
@@ -91,6 +121,7 @@ def build_parser():
   parser.add_argument("--exchanges", nargs='+', help='list of prediction exchanges', required=True)
   parser.add_argument("--volatility-config-file", help="multi volatility prediction training configuration file in full path", required=True)
   parser.add_argument("--return-config-file", help="multi return prediction training configuration file in full path", required=True)
+  parser.add_arguemnt("--vdelta-config-file", help="multi volatility delta prediction training configuration file in full path", required=True)
   parser.add_argument("--logfile", type=str, help="log filename", required=True)
   return parser
 
@@ -108,6 +139,7 @@ def main():
   create_interval_state()
   create_multi_volatility_prediction_gauges(app_name, args.exchanges, args.volatility_config_file)
   create_multi_return_prediction_gauges(app_name, args.exchanges, args.return_config_file)
+  create_multi_vdelta_prediction_gauges(app_name, args.exchanges, args.vdelta_config_file)
   try:
     asyncio.run(
         multi_monitor_extraction(

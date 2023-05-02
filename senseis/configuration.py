@@ -47,6 +47,7 @@ ETL_EXCHANGE_NAMES = ['etl_exchange_s1','etl_exchange_s2']
 PRED_EXCHANGE_NAMES = [
     'ETHUSD_multi_volatility_peachone','BTCUSD_multi_volatility_peachone',
     'ETHUSD_multi_return_peachone', 'BTCUSD_multi_return_peachone',
+    'ETHUSD_multi_vdelta_peachone', 'BTCUSD_multi_vdelta_peachone',
 ]
 
 EXCHANGE_PIDS = [
@@ -69,8 +70,10 @@ OUTPATHS = {
     "etl_exchange_s2" : "etl-s2",
     "ETHUSD_multi_volatility_peachone" : "ETHUSD-multi-volatility-peachone",
     "ETHUSD_multi_return_peachone"     : "ETHUSD-multi-return-peachone",
+    "ETHUSD_multi_vdelta_peachone"     : "ETHUSD-multi-vdelta-peachone",
     "BTCUSD_multi_volatility_peachone" : "BTCUSD-multi-volatility-peachone",
     "BTCUSD_multi_return_peachone"     : "BTCUSD-multi-return-peachone",
+    "BTCUSD_multi_vdelta_peachone"     : "BTCUSD-multi-vdelta-peachone",
 }
 
 STIME_COLNAME = 'sequence_time'
@@ -136,6 +139,9 @@ def is_multi_volatility_pred_exchange(exchange_name):
 def is_multi_return_pred_exchange(exchange_name):
   return '_multi_return_' in exchange_name
 
+def is_multi_vdelta_pred_exchange(exchange_name):
+  return '_multi_vdelta_' in exchange_name
+
 def get_exchange_pids(exchange_name):
   idx = int(exchange_name.split('_')[2])
   return EXCHANGE_PIDS[idx]
@@ -186,6 +192,8 @@ def get_s3_outpath(exchange_name):
   elif 'multi_volatility_peachone' in exchange_name:
     return OUTPATHS[exchange_name]
   elif 'multi_return_peachone' in exchange_name:
+    return OUTPATHS[exchange_name]
+  elif 'multi_vdelta_peachone' in exchange_name:
     return OUTPATHS[exchange_name]
   else:
     assert(False)

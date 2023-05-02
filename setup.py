@@ -69,6 +69,7 @@ setup(
         'hypertune_return_prediction = senseis.training.hypertune_return_prediction:main',
         'one_volatility_torch_prediction_v1 = senseis.training.one_volatility_torch_prediction_v1:main',
         'one_return_torch_prediction_v1 = senseis.training.one_return_torch_prediction_v1:main',
+        'one_vdelta_torch_prediction_v1 = senseis.training.one_vdelta_torch_prediction_v1:main',
         'book_monitor = senseis.monitor.book_monitor:main',
         'trade_monitor = senseis.monitor.trade_monitor:main',
         'prediction_etl_s2_monitor = senseis.monitor.prediction_etl_s2_monitor:main',

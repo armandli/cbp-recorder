@@ -12,6 +12,8 @@ import torch
 from torch import nn
 from torch import utils
 from torch import optim
+from sklearn.metrics import r2_score
+from scipy.stats import pearsonr
 
 from senseis.utility import setup_logging
 from senseis.configuration import S3_BUCKET
@@ -24,7 +26,7 @@ from senseis.training_utility import get_file_epochs, get_start_end_epochs, get_
 from senseis.training_utility import read_train_config, get_data, preprocess_data, ts_train_test_split
 from senseis.torch_training_utility import build_parser, get_device, get_loader_args, get_score_args
 from senseis.torch_training_utility import normalize_regression_data
-from senseis.torch_training_utility import regression_train, regression_validate, regression_train_validate
+from senseis.torch_training_utility import regression_train_validate
 from senseis.torch_training_utility import regression_validation_report
 
 def generate_regression_targets(data, ticker, targets):
@@ -33,17 +35,18 @@ def generate_regression_targets(data, ticker, targets):
   for ti in targets:
     data[f'{ticker}:{ti["target_name"]}'] = data[f'{ticker}:{ti["source_name"]}']
     data[f'{ticker}:{ti["target_name"]}'] = data[f'{ticker}:{ti["target_name"]}'].shift(-1 * ti['shift'])
+    data[f'{ticker}:{ti["target_name"]}'] = data[f'{ticker}:{ti["target_name"]}'] - data[f'{ticker}:{ti["source_name"]}']
     max_shift = max(max_shift, ti['shift'])
     target_columns.append(f'{ticker}:{ti["target_name"]}')
   data = data.drop([data.index[k] for k in range(-1, -1 * (max_shift + 1), -1)])
   return (data, target_columns)
 
 def save(args, model, metadata, start, end, dim):
-  cs = 'peachone' # call sign of the model to allow multiple models doing the same thing
+  cs = 'peachone'
   ticker = args.ticker_name.replace('-', '')
   if args.upload:
-    model_filename = f's3://{S3_BUCKET}/model/{ticker}_volatility_{dim}_torch_{cs}_v1_{start}_{end}.pt'
-    metadata_filename = f's3://{S3_BUCKET}/metadata/{ticker}_volatility_{dim}_torch_{cs}_metadata_v1_{start}_{end}.json.gzip'
+    model_filename = f's3://{S3_BUCKET}/model/{ticker}_vdelta_{dim}_torch_{cs}_v1_{start}_{end}.pt'
+    metadata_filename = f's3://{S3_BUCKET}/metadata/{ticker}_vdelta_{dim}_torch_{cs}_metadata_v1_{start}_{end}.json.gzip'
     with open(model_filename, 'wb', transport_params=dict(client=s3_client)) as fd:
       torch.save(model.state_dict(), fd)
     logging.info(f"Written out S3 model {model_filename}")
@@ -52,23 +55,23 @@ def save(args, model, metadata, start, end, dim):
       compressed = zlib.compress(metadata_str.encode())
       fd.write(compressed)
     logging.info(f"Written out S3 metadata {metadata_filename}")
-    key = ticker + '_multi_volatility_' + cs
+    key = ticker + '_multi_vdelta_' + cs
     config = {
       'ticker' : ticker,
       'model_type' : 'torch',
       'version' : 'v1',
       'call_sign' : cs,
-      'target' : 'volatility',
+      'target' : 'vdelta',
       'target_dim' : dim,
       'start_epoch' : start,
       'end_epoch' : end,
     }
     config = json.dumps(config, sort_keys=True)
     StateDBApi.set_config(key, config)
-    logging.info(f"Updated StateDB key {key}")
+    logging.info("Updated StateDB key {key}")
   else:
-    model_filename = f'{args.dir}/{ticker}_volatility_{dim}_torch_{cs}_v1_{start}_{end}.pt'
-    metadata_filename = f'{args.dir}/{ticker}_volatility_{dim}_torch_{cs}_metadata_v1_{start}_{end}.json.gzip'
+    model_filename = f'{args.dir}/{ticker}_vdelta_{dim}_torch_{cs}_v1_{start}_{end}.ptr'
+    metadata_filename = f'{args.dir}/{ticker}_vdelta_{dim}_torch_{cs}_metadata_v1_{start}_{end}.json.gzip'
     with open(model_filename, 'wb') as fd:
       torch.save(model.state_dict(), fd)
     logging.info(f"Written out local model {model_filename}")
@@ -78,6 +81,7 @@ def save(args, model, metadata, start, end, dim):
       fd.write(compressed)
     logging.info(f"Written out local metadata {metadata_filename}")
 
+#TODO: this is the same as volatility main, refactor
 def main():
   parser = build_parser()
   args = parser.parse_args()
@@ -161,6 +165,7 @@ def main():
   logging.info(f"Pearson: {metadata['eval_correlation']}")
 
   save(args, model, metadata, start_epoch, end_epoch, len(target_columns))
+
 
 if __name__ == '__main__':
   main()

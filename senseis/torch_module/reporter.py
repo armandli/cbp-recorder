@@ -54,3 +54,26 @@ class SReporter(Reporter):
 
   def train_loss(self, idx):
     return self.loss('train', idx)
+
+  def get_record(self, t, idx):
+    if idx >= 0:
+      count = 0
+      for (typ, data) in self.log:
+        if typ == t:
+          if count == idx:
+            return data
+          count += 1
+    else:
+      count = -1
+      for (typ, data) in reversed(self.log):
+        if typ == t:
+          if count == idx:
+            return data
+          count -= 1
+    return dict()
+
+  def eval_record(self, idx):
+    return self.get_record('eval', idx)
+
+  def train_record(self, idx):
+    return self.get_record('train', idx)

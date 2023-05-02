@@ -23,19 +23,9 @@ from senseis.statedb_api import StateDBApi
 from senseis.training_utility import s3_client
 from senseis.training_utility import get_file_epochs, get_start_end_epochs, get_all_files
 from senseis.training_utility import read_train_config, get_data, preprocess_data, ts_train_test_split
+from senseis.torch_training_utility import build_parser
 from senseis.torch_training_utility import get_device, get_loader_args, get_score_args
-
-def build_parser():
-  parser = argparse.ArgumentParser(description='parameters')
-  parser.add_argument('--dir', type=str, help='training data directory', required=True)
-  parser.add_argument('--file-prefix', type=str, help='training data filename prefix', required=True)
-  parser.add_argument('--ticker-name', type=str, help='crypto ticker name', required=True)
-  parser.add_argument('--train-config-filename', type=str, help='absolute path to training configuration file, can be on S3 or local', required=True)
-  parser.add_argument('--upload', action='store_true', dest='upload', help='upload to S3')
-  parser.add_argument('--no-upload', action='store_false', dest='upload', help='create model locally')
-  parser.set_defaults(upload=False)
-  parser.add_argument('--logfile', type=str, help='log filename', required=True)
-  return parser
+from senseis.torch_training_utility import normalize_classification_data
 
 def operator(op, a, b):
   if   op == '>':
@@ -63,20 +53,6 @@ def generate_classification_targets(data, ticker, targets):
     target_columns.append(f'{ticker}:{ti["target_name"]}')
   data = data.drop([data.index[k] for k in range(-1, -1 * (max_shift + 1), -1)])
   return (data, target_columns)
-
-def normalize_classification_data(X_train, Y_train, X_test, Y_test):
-  X_train_mean = X_train.mean(axis=0)
-  X_train_std = X_train.std(axis=0)
-  X_train_std[X_train_std == 0.] = 1.
-  X_train_norm = (X_train - X_train_mean) / X_train_std
-  X_test_norm = (X_test - X_train_mean) / X_train_std
-  params = {
-    'X_train_mean' : X_train_mean.tolist(),
-    'X_train_std'  : X_train_std.tolist(),
-    'Y_train_mean' : [0. for _ in range(Y_train.shape[1])], # need to generate to accomodate regression
-    'Y_train_std'  : [1. for _ in range(Y_train.shape[1])],
-  }
-  return (X_train_norm, X_test_norm, params)
 
 def classification_train(model, device, cpu, loader, optimizer, loss, epoch, reporter, target_dim):
   model.train()

@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/home/armandli/cbp-recorder
-ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder && source ./env/bin/activate && prediction_multi_model_monitor --exchanges ETHUSD_multi_volatility_peachone BTCUSD_multi_volatility_peachone ETHUSD_multi_return_peachone BTCUSD_multi_return_peachone --volatility-config-file s3://crypto-data/training-config/one_volatility_prediction_v1.json --return-config-file s3://crypto-data/training-config/one_return_prediction_v1.json --logfile prediction_multi_monitor.log'
+ExecStart=/bin/bash -c 'cd /home/armandli/cbp-recorder && source ./env/bin/activate && prediction_multi_model_monitor --exchanges ETHUSD_multi_volatility_peachone BTCUSD_multi_volatility_peachone ETHUSD_multi_return_peachone BTCUSD_multi_return_peachone ETHUSD_multi_vdelta_peachone BTCUSD_multi_vdelta_peachone --volatility-config-file s3://crypto-data/training-config/one_volatility_prediction_v1.json --return-config-file s3://crypto-data/training-config/one_return_prediction_v1.json --vdelta-config-file s3://crypto-data/training-config/one_vdelta_prediction_v1.json --logfile prediction_multi_monitor.log'
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:/home/armandli/cbp-recorder/prediction_multi_monitor_io.log
 StandardError=inherit
