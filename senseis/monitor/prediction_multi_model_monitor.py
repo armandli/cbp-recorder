@@ -87,6 +87,7 @@ def create_multi_vdelta_prediction_gauges(app_name, exchanges, config_file):
         f"{pid}:{target_name}" : Gauge(f"{app_name}_{pid.replace('-','_')}_{target_name}",
                                        f"{pid} {target_name}",
                                        registry=get_collector_registry())
+        for target_name in target_names
       }
       for call_sign in call_signs
     }
