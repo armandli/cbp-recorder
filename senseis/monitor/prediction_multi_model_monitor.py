@@ -121,7 +121,7 @@ def build_parser():
   parser.add_argument("--exchanges", nargs='+', help='list of prediction exchanges', required=True)
   parser.add_argument("--volatility-config-file", help="multi volatility prediction training configuration file in full path", required=True)
   parser.add_argument("--return-config-file", help="multi return prediction training configuration file in full path", required=True)
-  parser.add_arguemnt("--vdelta-config-file", help="multi volatility delta prediction training configuration file in full path", required=True)
+  parser.add_argument("--vdelta-config-file", help="multi volatility delta prediction training configuration file in full path", required=True)
   parser.add_argument("--logfile", type=str, help="log filename", required=True)
   return parser
 
